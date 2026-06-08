@@ -11,10 +11,10 @@ router.get('/:classId/subjects', auth, classController.getClassSubjects)
 
 router.post('/', auth, roleAuth('EXAM_OFFICER'), [
   body('name').notEmpty().withMessage('Class name is required'),
-  body('level').isIn(['PRIMARY', 'SECONDARY']).withMessage('Level must be PRIMARY or SECONDARY')
+  body('level').isIn(['MONTESSORI', 'NURSERY', 'PRIMARY', 'SECONDARY']).withMessage('Invalid level')
 ], classController.createClass)
 
-router.post('/subjects', auth, roleAuth('EXAM_OFFICER'), [
+router.post('/subjects', auth, roleAuth('EXAM_OFFICER', 'FORM_TEACHER'), [
   body('name').notEmpty().withMessage('Subject name is required'),
   body('classId').notEmpty().withMessage('Class ID is required')
 ], classController.createSubject)

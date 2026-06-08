@@ -37,9 +37,9 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
           <div>
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Email, Phone, or Username</label>
             <input
-              type="email"
+              type="text"
               required
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}

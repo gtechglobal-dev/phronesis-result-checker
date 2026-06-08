@@ -16,9 +16,7 @@ exports.createResult = async (req, res) => {
     const existing = await prisma.result.findFirst({
       where: { studentId, sessionId, termId }
     })
-    if (existing) {
-      return res.status(400).json({ message: 'Result already exists for this student in this session/term' })
-    }
+    if (existing) return res.status(400).json({ message: 'Result already exists for this student in this session/term' })
 
     let totalScore = 0
     const details = scores.map((s) => {
@@ -32,10 +30,7 @@ exports.createResult = async (req, res) => {
 
     const result = await prisma.result.create({
       data: {
-        studentId,
-        classId,
-        sessionId,
-        termId,
+        studentId, classId, sessionId, termId,
         totalScore,
         average: Math.round(average * 100) / 100,
         examOfficerId: req.user.id,
@@ -43,10 +38,7 @@ exports.createResult = async (req, res) => {
       },
       include: {
         details: { include: { subject: true } },
-        student: true,
-        class: true,
-        session: true,
-        term: true
+        student: true, class: true, session: true, term: true
       }
     })
 
@@ -62,9 +54,7 @@ exports.getStudentResults = async (req, res) => {
       where: { studentId: req.params.studentId },
       include: {
         details: { include: { subject: true }, orderBy: { subject: { name: 'asc' } } },
-        class: true,
-        session: true,
-        term: true
+        class: true, session: true, term: true
       },
       orderBy: [{ session: { createdAt: 'desc' } }, { term: { createdAt: 'desc' } }]
     })
@@ -81,17 +71,31 @@ exports.getResult = async (req, res) => {
       include: {
         details: { include: { subject: true }, orderBy: { subject: { name: 'asc' } } },
         student: { include: { class: true } },
-        class: true,
-        session: true,
-        term: true,
+        class: true, session: true, term: true,
         examOfficer: { select: { firstName: true, lastName: true } },
         formTeacher: { select: { firstName: true, lastName: true } }
       }
     })
-    if (!result) {
-      return res.status(404).json({ message: 'Result not found' })
+    if (!result) return res.status(404).json({ message: 'Result not found' })
+
+    if (result.withheld && req.user?.role !== 'EXAM_OFFICER') {
+      return res.json({ withheld: true, message: 'Result withheld. Please clear fees.', student: result.student, class: result.class, session: result.session, term: result.term })
     }
+
     res.json(result)
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message })
+  }
+}
+
+exports.toggleWithhold = async (req, res) => {
+  try {
+    const { withheld } = req.body
+    const result = await prisma.result.update({
+      where: { id: req.params.id },
+      data: { withheld }
+    })
+    res.json({ message: withheld ? 'Result withheld' : 'Result released', result })
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })
   }
@@ -117,14 +121,9 @@ exports.updatePositions = async (req, res) => {
       where: { classId, sessionId, termId },
       orderBy: { totalScore: 'desc' }
     })
-
     for (let i = 0; i < results.length; i++) {
-      await prisma.result.update({
-        where: { id: results[i].id },
-        data: { position: i + 1 }
-      })
+      await prisma.result.update({ where: { id: results[i].id }, data: { position: i + 1 } })
     }
-
     res.json({ message: 'Positions updated successfully' })
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })
@@ -135,21 +134,19 @@ exports.checkByRegNo = async (req, res) => {
   try {
     const { regNo, sessionId, termId } = req.query
     const student = await prisma.student.findUnique({ where: { regNo }, include: { class: true } })
-    if (!student) {
-      return res.status(404).json({ message: 'Student not found' })
-    }
+    if (!student) return res.status(404).json({ message: 'Student not found' })
 
     const result = await prisma.result.findFirst({
       where: { studentId: student.id, sessionId, termId },
       include: {
         details: { include: { subject: true }, orderBy: { subject: { name: 'asc' } } },
-        class: true,
-        session: true,
-        term: true
+        class: true, session: true, term: true
       }
     })
-    if (!result) {
-      return res.status(404).json({ message: 'Result not found for this session/term' })
+    if (!result) return res.status(404).json({ message: 'Result not found for this session/term' })
+
+    if (result.withheld) {
+      return res.json({ withheld: true, message: 'Result withheld. Please clear fees.', student, result: null })
     }
 
     res.json({ student, result })
@@ -160,30 +157,65 @@ exports.checkByRegNo = async (req, res) => {
 
 exports.getFormTeacherClassResults = async (req, res) => {
   try {
-    const classTeacher = await prisma.classTeacher.findFirst({
-      where: { userId: req.user.id }
-    })
-    if (!classTeacher) {
-      return res.status(403).json({ message: 'You are not assigned as a form teacher' })
+    const { sessionId, termId, classId: queryClassId } = req.query
+
+    let classId
+    if (req.user.role === 'EXAM_OFFICER') {
+      classId = queryClassId
+      if (!classId) return res.status(400).json({ message: 'classId required for exam officer' })
+    } else {
+      const classTeacher = await prisma.classTeacher.findFirst({ where: { userId: req.user.id } })
+      if (!classTeacher) return res.status(403).json({ message: 'Not assigned as a form teacher' })
+      classId = classTeacher.classId
     }
 
-    const { sessionId, termId } = req.query
     const results = await prisma.result.findMany({
       where: {
-        classId: classTeacher.classId,
+        classId,
         ...(sessionId && { sessionId }),
         ...(termId && { termId })
       },
       include: {
-        student: true,
-        session: true,
-        term: true,
+        student: true, session: true, term: true,
         details: { include: { subject: true } }
       },
       orderBy: { student: { lastName: 'asc' } }
     })
 
-    res.json({ class: classTeacher.class, results })
+    const classInfo = await prisma.class.findUnique({ where: { id: classId } })
+    res.json({ class: classInfo, results })
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message })
+  }
+}
+
+exports.getParentChildrenResults = async (req, res) => {
+  try {
+    const children = await prisma.student.findMany({
+      where: { parentId: req.user.id },
+      include: {
+        class: true,
+        results: {
+          include: {
+            details: { include: { subject: true }, orderBy: { subject: { name: 'asc' } } },
+            session: true, term: true, class: true
+          },
+          orderBy: [{ session: { createdAt: 'desc' } }, { term: { createdAt: 'desc' } }]
+        }
+      }
+    })
+
+    const mapped = children.map(child => ({
+      ...child,
+      results: child.results.map(r => {
+        if (r.withheld) {
+          return { ...r, withheld: true, details: [], totalScore: 0, average: 0, _message: 'Result withheld. Please clear fees.' }
+        }
+        return r
+      })
+    }))
+
+    res.json(mapped)
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })
   }

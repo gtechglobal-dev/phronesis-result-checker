@@ -24,7 +24,8 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (data) => api.post('/auth/login', data),
   register: (data) => api.post('/auth/register', data),
-  getMe: () => api.get('/auth/me')
+  getMe: () => api.get('/auth/me'),
+  createTeacher: (data) => api.post('/auth/create-teacher', data)
 }
 
 export const classAPI = {
@@ -41,21 +42,25 @@ export const classAPI = {
 
 export const studentAPI = {
   getAll: (params) => api.get('/students', { params }),
+  getUnlinked: (params) => api.get('/students/unlinked', { params }),
   getById: (id) => api.get(`/students/${id}`),
   getMyChildren: () => api.get('/students/my-children'),
-  getByClass: (classId) => api.get(`/students/class/${classId}`),
+  getByClass: (classId) => api.get(`/students/by-class/${classId}`),
   create: (data) => api.post('/students', data),
+  bulkCreate: (data) => api.post('/students/bulk', data),
   update: (id, data) => api.put(`/students/${id}`, data)
 }
 
 export const resultAPI = {
   checkByRegNo: (params) => api.get('/results/check', { params }),
   getStudentResults: (studentId) => api.get(`/results/student/${studentId}`),
+  getParentChildrenResults: () => api.get('/results/parent-children'),
   getById: (id) => api.get(`/results/${id}`),
   create: (data) => api.post('/results', data),
   addComment: (id, data) => api.put(`/results/${id}/comment`, data),
-  updatePositions: (data) => api.post('/results/update-positions', data),
-  getFormTeacherResults: (params) => api.get('/results/form-teacher', { params })
+  toggleWithhold: (id, data) => api.put(`/results/${id}/withhold`, data),
+  updatePositions: (data) => api.post('/results/positions', data),
+  getFormTeacherResults: (params) => api.get('/results/my-class', { params })
 }
 
 export default api

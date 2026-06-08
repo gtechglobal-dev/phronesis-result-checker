@@ -82,7 +82,7 @@ async function main() {
   console.log('✓ Created terms')
 
   console.log('\n✅ Seed completed successfully!')
-  console.log('📧 Exam Officer: exam.officer@phronesis.com / admin123')
+  console.log('🔑 Admin login: Admin / Phronesis2026 (hardcoded)')
 }
 
 main()

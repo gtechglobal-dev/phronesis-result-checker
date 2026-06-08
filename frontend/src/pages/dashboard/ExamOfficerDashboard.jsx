@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { classAPI, studentAPI, resultAPI } from '../../services/api'
+import { classAPI, studentAPI, resultAPI, authAPI } from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
 
 export default function ExamOfficerDashboard() {
@@ -18,8 +18,15 @@ export default function ExamOfficerDashboard() {
   const [resultForm, setResultForm] = useState({ studentId: '', classId: '', sessionId: '', termId: '', scores: [] })
   const [sessionForm, setSessionForm] = useState({ name: '', isCurrent: false })
   const [termForm, setTermForm] = useState({ name: '', sessionId: '', isCurrent: false })
-  const [teacherAssign, setTeacherAssign] = useState({ userId: '', classId: '' })
+  const [teacherForm, setTeacherForm] = useState({ firstName: '', lastName: '', email: '', password: '', classIds: [] })
   const [positionsForm, setPositionsForm] = useState({ classId: '', sessionId: '', termId: '' })
+  const [bulkStudents, setBulkStudents] = useState('')
+  const [bulkClassId, setBulkClassId] = useState('')
+
+  const [withholdList, setWithholdList] = useState([])
+  const [withholdSession, setWithholdSession] = useState('')
+  const [withholdTerm, setWithholdTerm] = useState('')
+  const [withholdClass, setWithholdClass] = useState('')
 
   const tabs = [
     { id: 'students', label: 'Students' },
@@ -28,7 +35,8 @@ export default function ExamOfficerDashboard() {
     { id: 'results', label: 'Results' },
     { id: 'sessions', label: 'Sessions' },
     { id: 'teachers', label: 'Teachers' },
-    { id: 'positions', label: 'Positions' }
+    { id: 'withhold', label: 'Withhold' },
+    { id: 'bulk', label: 'Bulk Upload' }
   ]
 
   useEffect(() => {
@@ -42,78 +50,112 @@ export default function ExamOfficerDashboard() {
   const loadSessions = async () => {
     try { const res = await classAPI.getSessions(); setSessions(res.data) } catch (err) { console.error(err) }
   }
-  const loadStudents = async (classId) => {
-    try { setLoading(true); const res = await studentAPI.getAll({ classId }); setStudents(res.data) } catch (err) { console.error(err) } finally { setLoading(false) }
+
+  const loadWithholdResults = async () => {
+    if (!withholdClass || !withholdSession || !withholdTerm) return
+    try {
+      const res = await resultAPI.getFormTeacherResults({ classId: withholdClass, sessionId: withholdSession, termId: withholdTerm })
+      if (res.data.results) setWithholdList(res.data.results)
+    } catch (err) { console.error(err) }
   }
-  const loadSubjects = async (classId) => {
-    try { const res = await classAPI.getSubjects(classId); setSubjects(res.data) } catch (err) { console.error(err) }
-  }
+
+  useEffect(() => {
+    if (withholdClass && withholdSession && withholdTerm) loadWithholdResults()
+  }, [withholdClass, withholdSession, withholdTerm])
 
   const handleCreateStudent = async (e) => {
     e.preventDefault()
     try {
       await studentAPI.create(studentForm)
-      setMessage('Student created successfully')
+      setMessage('Student created')
       setStudentForm({ regNo: '', firstName: '', lastName: '', classId: '', arm: 'A' })
-      loadStudents(studentForm.classId)
     } catch (err) { setMessage(err.response?.data?.message || 'Error') }
   }
+
+  const handleBulkUpload = async (e) => {
+    e.preventDefault()
+    try {
+      const lines = bulkStudents.trim().split('\n').filter(Boolean)
+      const students = lines.map(line => {
+        const [regNo, firstName, lastName, arm] = line.split(',').map(s => s.trim())
+        return { regNo, firstName, lastName, classId: bulkClassId, arm: arm || 'A' }
+      })
+      const res = await studentAPI.bulkCreate({ students })
+      setMessage(res.data.message)
+      setBulkStudents('')
+    } catch (err) { setMessage(err.response?.data?.message || 'Error') }
+  }
+
   const handleCreateClass = async (e) => {
     e.preventDefault()
     try {
       await classAPI.create(classForm)
-      setMessage('Class created successfully')
+      setMessage('Class created')
       setClassForm({ name: '', level: 'PRIMARY' })
       loadClasses()
     } catch (err) { setMessage(err.response?.data?.message || 'Error') }
   }
+
   const handleCreateSubject = async (e) => {
     e.preventDefault()
     try {
       await classAPI.createSubject(subjectForm)
-      setMessage('Subject created successfully')
+      setMessage('Subject created')
       setSubjectForm({ name: '', classId: '' })
-      if (subjectForm.classId) loadSubjects(subjectForm.classId)
     } catch (err) { setMessage(err.response?.data?.message || 'Error') }
   }
+
   const handleCreateResult = async (e) => {
     e.preventDefault()
     try {
       await resultAPI.create(resultForm)
-      setMessage('Result created successfully')
+      setMessage('Result created')
       setResultForm({ studentId: '', classId: '', sessionId: '', termId: '', scores: [] })
     } catch (err) { setMessage(err.response?.data?.message || 'Error') }
   }
+
   const handleCreateSession = async (e) => {
     e.preventDefault()
     try {
       await classAPI.createSession(sessionForm)
-      setMessage('Session created successfully')
+      setMessage('Session created')
       setSessionForm({ name: '', isCurrent: false })
       loadSessions()
     } catch (err) { setMessage(err.response?.data?.message || 'Error') }
   }
+
   const handleCreateTerm = async (e) => {
     e.preventDefault()
     try {
       await classAPI.createTerm(termForm)
-      setMessage('Term created successfully')
+      setMessage('Term created')
       setTermForm({ name: '', sessionId: '', isCurrent: false })
       loadSessions()
     } catch (err) { setMessage(err.response?.data?.message || 'Error') }
   }
-  const handleAssignTeacher = async (e) => {
+
+  const handleCreateTeacher = async (e) => {
     e.preventDefault()
     try {
-      await classAPI.assignTeacher(teacherAssign)
-      setMessage('Teacher assigned successfully')
+      await authAPI.createTeacher(teacherForm)
+      setMessage('Teacher created')
+      setTeacherForm({ firstName: '', lastName: '', email: '', password: '', classIds: [] })
     } catch (err) { setMessage(err.response?.data?.message || 'Error') }
   }
+
   const handleUpdatePositions = async (e) => {
     e.preventDefault()
     try {
       await resultAPI.updatePositions(positionsForm)
-      setMessage('Positions updated successfully')
+      setMessage('Positions updated')
+    } catch (err) { setMessage(err.response?.data?.message || 'Error') }
+  }
+
+  const handleWithhold = async (resultId, withheld) => {
+    try {
+      await resultAPI.toggleWithhold(resultId, { withheld })
+      setMessage(withheld ? 'Result withheld' : 'Result released')
+      loadWithholdResults()
     } catch (err) { setMessage(err.response?.data?.message || 'Error') }
   }
 
@@ -130,6 +172,14 @@ export default function ExamOfficerDashboard() {
     setResultForm({ ...resultForm, scores: [...resultForm.scores, { subjectId: '', ca1: 0, ca2: 0, exam: 0 }] })
   }
 
+  const loadSubjects = async (classId) => {
+    try { const res = await classAPI.getSubjects(classId); setSubjects(res.data) } catch (err) { console.error(err) }
+  }
+
+  const loadStudents = async (classId) => {
+    try { setLoading(true); const res = await studentAPI.getAll({ classId }); setStudents(res.data) } catch (err) { console.error(err) } finally { setLoading(false) }
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
       <div className="mb-6 sm:mb-8">
@@ -144,17 +194,13 @@ export default function ExamOfficerDashboard() {
         </div>
       )}
 
-      <div className="flex flex-nowrap gap-1.5 sm:gap-2 mb-6 overflow-x-auto pb-1 scrollbar-thin">
+      <div className="flex flex-nowrap gap-1.5 sm:gap-2 mb-6 overflow-x-auto pb-1">
         {tabs.map((t) => (
-          <button
-            key={t.id}
+          <button key={t.id}
             onClick={() => setActiveTab(t.id)}
             className={`shrink-0 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition whitespace-nowrap ${
               activeTab === t.id ? 'bg-[#1B5E20] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {t.label}
-          </button>
+            }`}>{t.label}</button>
         ))}
       </div>
 
@@ -176,32 +222,30 @@ export default function ExamOfficerDashboard() {
               </div>
               <select required value={studentForm.classId}
                 onChange={(e) => setStudentForm({ ...studentForm, classId: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm">
+                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
                 <option value="">Select Class</option>
                 {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
               <input type="text" placeholder="Arm (A, B, C...)" value={studentForm.arm}
                 onChange={(e) => setStudentForm({ ...studentForm, arm: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm" />
-              <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">
-                Add Student
-              </button>
+                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
+              <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">Add Student</button>
             </form>
           </div>
           <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
             <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Students List</h3>
             <select onChange={(e) => loadStudents(e.target.value)} className="w-full mb-4 px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
               <option value="">Filter by Class</option>
-              {classes.map((c) => <option key={c.id} value={c.id}>{c.name} ({c._count.students})</option>)}
+              {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <div className="max-h-96 overflow-y-auto space-y-2">
               {students.map((s) => (
-                <div key={s.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 bg-gray-50 rounded-lg text-sm">
+                <div key={s.id} className="flex justify-between items-center gap-1 p-3 bg-gray-50 rounded-lg text-sm">
                   <div className="truncate">
                     <span className="font-medium">{s.firstName} {s.lastName}</span>
                     <span className="text-gray-500 text-xs ml-1 sm:ml-2">({s.regNo})</span>
                   </div>
-                  <span className="text-[10px] sm:text-xs bg-[#1B5E20] text-white px-2 py-1 rounded self-start sm:self-center shrink-0">{s.class?.name} {s.arm}</span>
+                  <span className="text-[10px] sm:text-xs bg-[#1B5E20] text-white px-2 py-1 rounded shrink-0">{s.class?.name} {s.arm}</span>
                 </div>
               ))}
               {!loading && students.length === 0 && <p className="text-gray-400 text-xs sm:text-sm text-center py-4">No students found</p>}
@@ -210,30 +254,47 @@ export default function ExamOfficerDashboard() {
         </div>
       )}
 
+      {activeTab === 'bulk' && (
+        <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-md p-5 sm:p-6">
+          <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Bulk Upload Students</h3>
+          <form onSubmit={handleBulkUpload} className="space-y-3">
+            <select required value={bulkClassId} onChange={(e) => setBulkClassId(e.target.value)}
+              className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
+              <option value="">Select Class</option>
+              {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <textarea rows={8} required value={bulkStudents} onChange={(e) => setBulkStudents(e.target.value)}
+              className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-mono"
+              placeholder="regNo, FirstName, LastName, Arm&#10;PHS001, John, Doe, A&#10;PHS002, Jane, Smith, B" />
+            <p className="text-[10px] sm:text-xs text-gray-400">One student per line: regNo, FirstName, LastName, Arm</p>
+            <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">Upload Students</button>
+          </form>
+        </div>
+      )}
+
       {activeTab === 'classes' && (
         <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
           <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
             <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Add Class</h3>
             <form onSubmit={handleCreateClass} className="space-y-3">
-              <select value={classForm.level}
-                onChange={(e) => setClassForm({ ...classForm, level: e.target.value })}
+              <select value={classForm.level} onChange={(e) => setClassForm({ ...classForm, level: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
+                <option value="MONTESSORI">Montessori</option>
+                <option value="NURSERY">Nursery</option>
                 <option value="PRIMARY">Primary</option>
                 <option value="SECONDARY">Secondary</option>
               </select>
               <input type="text" placeholder="Class Name (e.g., Primary 1)" required value={classForm.name}
                 onChange={(e) => setClassForm({ ...classForm, name: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm" />
-              <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">
-                Add Class
-              </button>
+                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
+              <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">Add Class</button>
             </form>
           </div>
           <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
             <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">All Classes</h3>
             <div className="space-y-2">
               {classes.map((c) => (
-                <div key={c.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 bg-gray-50 rounded-lg text-sm">
+                <div key={c.id} className="flex justify-between items-center gap-1 p-3 bg-gray-50 rounded-lg text-sm">
                   <span className="font-medium">{c.name}</span>
                   <div className="flex gap-3 text-xs text-gray-500">
                     <span>{c._count.students} students</span>
@@ -259,10 +320,8 @@ export default function ExamOfficerDashboard() {
               </select>
               <input type="text" placeholder="Subject Name" required value={subjectForm.name}
                 onChange={(e) => setSubjectForm({ ...subjectForm, name: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm" />
-              <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">
-                Add Subject
-              </button>
+                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
+              <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">Add Subject</button>
             </form>
           </div>
           <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
@@ -302,52 +361,38 @@ export default function ExamOfficerDashboard() {
                 onChange={(e) => setResultForm({ ...resultForm, termId: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
                 <option value="">Select Term</option>
-                {sessions.filter(s => resultForm.sessionId && s.id === resultForm.sessionId).flatMap(s => s.terms).map((t) => (
+                {sessions.filter(s => s.id === resultForm.sessionId).flatMap(s => s.terms).map((t) => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
               </select>
-              <input type="text" placeholder="Student ID or Reg No." required value={resultForm.studentId}
+              <input type="text" placeholder="Student ID" required value={resultForm.studentId}
                 onChange={(e) => setResultForm({ ...resultForm, studentId: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
             </div>
-
             <div className="border-t pt-4">
               <div className="flex justify-between items-center mb-3">
                 <h4 className="font-semibold text-gray-700 text-sm">Subject Scores</h4>
-                <button type="button" onClick={addSubjectScore} className="text-xs sm:text-sm bg-yellow-500 text-white px-2 sm:px-3 py-1 rounded hover:bg-yellow-600 transition">
-                  + Add Subject
-                </button>
+                <button type="button" onClick={addSubjectScore} className="text-xs sm:text-sm bg-yellow-500 text-white px-2 sm:px-3 py-1 rounded hover:bg-yellow-600 transition">+ Add Subject</button>
               </div>
-              {resultForm.scores.length > 0 && (
-                <div className="space-y-2 sm:space-y-3">
-                  {resultForm.scores.map((score, idx) => (
-                    <div key={idx} className="grid grid-cols-5 gap-1 sm:gap-2 items-end">
-                      <select required value={score.subjectId}
-                        onChange={(e) => { const s = [...resultForm.scores]; s[idx].subjectId = e.target.value; setResultForm({ ...resultForm, scores: s }) }}
-                        className="px-1.5 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-[10px] sm:text-sm min-w-0">
-                        <option value="">Subj</option>
-                        {subjects.map((s) => <option key={s.id} value={s.id}>{s.name.length > 6 ? s.name.slice(0, 6)+'..' : s.name}</option>)}
-                      </select>
-                      <input type="number" placeholder="C1" min="0" max="15" value={score.ca1}
-                        onChange={(e) => updateScore(idx, 'ca1', e.target.value)}
-                        className="px-1 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-[10px] sm:text-sm w-full" />
-                      <input type="number" placeholder="C2" min="0" max="15" value={score.ca2}
-                        onChange={(e) => updateScore(idx, 'ca2', e.target.value)}
-                        className="px-1 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-[10px] sm:text-sm w-full" />
-                      <input type="number" placeholder="Ex" min="0" max="70" value={score.exam}
-                        onChange={(e) => updateScore(idx, 'exam', e.target.value)}
-                        className="px-1 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-[10px] sm:text-sm w-full" />
-                      <span className="text-[10px] sm:text-sm font-medium text-center">{score.ca1 + score.ca2 + score.exam}</span>
-                    </div>
-                  ))}
+              {resultForm.scores.map((score, idx) => (
+                <div key={idx} className="grid grid-cols-5 gap-1 sm:gap-2 items-end mb-2">
+                  <select required value={score.subjectId} onChange={(e) => { const s = [...resultForm.scores]; s[idx].subjectId = e.target.value; setResultForm({ ...resultForm, scores: s }) }}
+                    className="px-1.5 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-[10px] sm:text-sm">
+                    <option value="">Subj</option>
+                    {subjects.map((s) => <option key={s.id} value={s.id}>{s.name.length > 6 ? s.name.slice(0, 6)+'..' : s.name}</option>)}
+                  </select>
+                  <input type="number" placeholder="C1" min="0" max="15" value={score.ca1} onChange={(e) => updateScore(idx, 'ca1', e.target.value)}
+                    className="px-1 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-[10px] sm:text-sm w-full" />
+                  <input type="number" placeholder="C2" min="0" max="15" value={score.ca2} onChange={(e) => updateScore(idx, 'ca2', e.target.value)}
+                    className="px-1 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-[10px] sm:text-sm w-full" />
+                  <input type="number" placeholder="Ex" min="0" max="70" value={score.exam} onChange={(e) => updateScore(idx, 'exam', e.target.value)}
+                    className="px-1 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-[10px] sm:text-sm w-full" />
+                  <span className="text-[10px] sm:text-sm font-medium text-center">{score.ca1 + score.ca2 + score.exam}</span>
                 </div>
-              )}
+              ))}
             </div>
-
             <button type="submit" disabled={resultForm.scores.length === 0}
-              className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition disabled:opacity-50 text-sm">
-              Submit Result
-            </button>
+              className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition disabled:opacity-50 text-sm">Submit Result</button>
           </form>
         </div>
       )}
@@ -360,15 +405,12 @@ export default function ExamOfficerDashboard() {
               <form onSubmit={handleCreateSession} className="space-y-3">
                 <input type="text" placeholder="e.g., 2026/2027" required value={sessionForm.name}
                   onChange={(e) => setSessionForm({ ...sessionForm, name: e.target.value })}
-                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm" />
+                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
                 <label className="flex items-center gap-2 text-xs sm:text-sm">
-                  <input type="checkbox" checked={sessionForm.isCurrent}
-                    onChange={(e) => setSessionForm({ ...sessionForm, isCurrent: e.target.checked })} />
+                  <input type="checkbox" checked={sessionForm.isCurrent} onChange={(e) => setSessionForm({ ...sessionForm, isCurrent: e.target.checked })} />
                   Set as current session
                 </label>
-                <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">
-                  Create Session
-                </button>
+                <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">Create Session</button>
               </form>
             </div>
             <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
@@ -384,13 +426,10 @@ export default function ExamOfficerDashboard() {
                   onChange={(e) => setTermForm({ ...termForm, name: e.target.value })}
                   className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
                 <label className="flex items-center gap-2 text-xs sm:text-sm">
-                  <input type="checkbox" checked={termForm.isCurrent}
-                    onChange={(e) => setTermForm({ ...termForm, isCurrent: e.target.checked })} />
+                  <input type="checkbox" checked={termForm.isCurrent} onChange={(e) => setTermForm({ ...termForm, isCurrent: e.target.checked })} />
                   Set as current term
                 </label>
-                <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">
-                  Create Term
-                </button>
+                <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">Create Term</button>
               </form>
             </div>
           </div>
@@ -405,9 +444,7 @@ export default function ExamOfficerDashboard() {
                   </div>
                   <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2">
                     {s.terms.map((t) => (
-                      <span key={t.id} className={`text-[10px] sm:text-xs px-2 py-0.5 sm:py-1 rounded ${t.isCurrent ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100'}`}>
-                        {t.name}
-                      </span>
+                      <span key={t.id} className={`text-[10px] sm:text-xs px-2 py-0.5 sm:py-1 rounded ${t.isCurrent ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100'}`}>{t.name}</span>
                     ))}
                   </div>
                 </div>
@@ -420,25 +457,91 @@ export default function ExamOfficerDashboard() {
       {activeTab === 'teachers' && (
         <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
           <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Assign Form Teacher</h3>
-            <form onSubmit={handleAssignTeacher} className="space-y-3">
-              <input type="text" placeholder="User ID" required value={teacherAssign.userId}
-                onChange={(e) => setTeacherAssign({ ...teacherAssign, userId: e.target.value })}
+            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Create Form Teacher</h3>
+            <form onSubmit={handleCreateTeacher} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <input type="text" placeholder="First Name" required value={teacherForm.firstName}
+                  onChange={(e) => setTeacherForm({ ...teacherForm, firstName: e.target.value })}
+                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
+                <input type="text" placeholder="Last Name" required value={teacherForm.lastName}
+                  onChange={(e) => setTeacherForm({ ...teacherForm, lastName: e.target.value })}
+                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <input type="email" placeholder="Email (login)" required value={teacherForm.email}
+                onChange={(e) => setTeacherForm({ ...teacherForm, email: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
-              <select required value={teacherAssign.classId}
-                onChange={(e) => setTeacherAssign({ ...teacherAssign, classId: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
-                <option value="">Select Class</option>
+              <input type="text" placeholder="Temporary Password" required value={teacherForm.password}
+                onChange={(e) => setTeacherForm({ ...teacherForm, password: e.target.value })}
+                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
+              <select multiple value={teacherForm.classIds}
+                onChange={(e) => setTeacherForm({ ...teacherForm, classIds: Array.from(e.target.selectedOptions, o => o.value) })}
+                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm h-32">
                 {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-              <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">
-                Assign Teacher
-              </button>
+              <p className="text-[10px] sm:text-xs text-gray-400">Hold Ctrl/Cmd to select multiple classes</p>
+              <button type="submit" className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition text-sm">Create Teacher</button>
             </form>
           </div>
           <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
             <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Teacher Assignments</h3>
             <TeacherAssignments />
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'withhold' && (
+        <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
+          <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Withhold / Release Results</h3>
+          <div className="flex flex-wrap gap-2 sm:gap-3 mb-4">
+            <select value={withholdClass} onChange={(e) => setWithholdClass(e.target.value)}
+              className="px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
+              <option value="">Select Class</option>
+              {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <select value={withholdSession} onChange={(e) => setWithholdSession(e.target.value)}
+              className="px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
+              <option value="">Select Session</option>
+              {sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <select value={withholdTerm} onChange={(e) => setWithholdTerm(e.target.value)}
+              className="px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
+              <option value="">Select Term</option>
+              {sessions.filter(s => s.id === withholdSession).flatMap(s => s.terms).map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs sm:text-sm">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="text-left p-2 sm:p-3 font-medium">Student</th>
+                  <th className="text-left p-2 sm:p-3 font-medium">Total</th>
+                  <th className="text-left p-2 sm:p-3 font-medium">Status</th>
+                  <th className="text-left p-2 sm:p-3 font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {withholdList.map((r) => (
+                  <tr key={r.id} className="border-t hover:bg-gray-50">
+                    <td className="p-2 sm:p-3 font-medium whitespace-nowrap">{r.student?.firstName} {r.student?.lastName}</td>
+                    <td className="p-2 sm:p-3 whitespace-nowrap">{r.totalScore}</td>
+                    <td className="p-2 sm:p-3 whitespace-nowrap">
+                      <span className={`px-2 py-0.5 rounded text-[10px] sm:text-xs font-bold ${r.withheld ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                        {r.withheld ? 'Withheld' : 'Released'}
+                      </span>
+                    </td>
+                    <td className="p-2 sm:p-3 whitespace-nowrap">
+                      <button onClick={() => handleWithhold(r.id, !r.withheld)}
+                        className={`text-[10px] sm:text-xs px-2 sm:px-3 py-1 rounded text-white font-medium transition ${r.withheld ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                        {r.withheld ? 'Release' : 'Withhold'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {withholdList.length === 0 && <tr><td colSpan="4" className="text-center p-4 text-gray-400">Select class/session/term to view results</td></tr>}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -463,13 +566,11 @@ export default function ExamOfficerDashboard() {
               onChange={(e) => setPositionsForm({ ...positionsForm, termId: e.target.value })}
               className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
               <option value="">Select Term</option>
-              {sessions.filter(s => positionsForm.sessionId && s.id === positionsForm.sessionId).flatMap(s => s.terms).map((t) => (
+              {sessions.filter(s => s.id === positionsForm.sessionId).flatMap(s => s.terms).map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
-            <button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-2.5 rounded-lg font-semibold transition text-sm">
-              Update Positions
-            </button>
+            <button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-2.5 rounded-lg font-semibold transition text-sm">Update Positions</button>
           </form>
         </div>
       )}
@@ -485,7 +586,7 @@ function TeacherAssignments() {
   return (
     <div className="space-y-2">
       {assignments.map((a) => (
-        <div key={a.id} className="p-3 bg-gray-50 rounded-lg flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 text-sm">
+        <div key={a.id} className="p-3 bg-gray-50 rounded-lg flex justify-between items-center gap-1 text-sm">
           <span className="font-medium">{a.user.firstName} {a.user.lastName}</span>
           <span className="text-xs text-gray-500">{a.class.name}</span>
         </div>

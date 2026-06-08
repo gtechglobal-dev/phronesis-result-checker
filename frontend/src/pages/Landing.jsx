@@ -15,6 +15,9 @@ export default function Landing() {
               <p className="mt-3 text-xs sm:text-sm text-yellow-300 font-medium">
                 30A & 30B NTA Road, Opp. Govt. Girls School, R/Okuta by 1 Okoa Str., Beside St. France Cath. Church, Port-Harcourt
               </p>
+              <p className="mt-2 text-xs sm:text-sm text-yellow-200">
+                &#9742; 0818-175-9399, 0813-676-7214, 0803-875-1506
+              </p>
               <p className="mt-4 sm:mt-6 text-base sm:text-lg text-gray-200 leading-relaxed">
                 A centre for academic excellence, nurturing young minds from Montessori through Secondary
                 education. Our result checker portal provides parents and students with seamless access
