@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  FORM_TEACHER
+  PARENT
+  EXAM_OFFICER
+}
+
+enum Level {
+  MONTESSORI
+  NURSERY
+  PRIMARY
+  SECONDARY
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      Role
+  firstName String
+  lastName  String
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  students         Student[]
+  classAssignments ClassTeacher[]
+  resultsCreated   Result[]      @relation("ExamOfficer")
+  resultsCommented Result[]      @relation("FormTeacher")
+}
+
+model Student {
+  id        String   @id @default(uuid())
+  regNo     String   @unique
+  firstName String
+  lastName  String
+  arm       String   @default("A")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  classId  String
+  class    Class    @relation(fields: [classId], references: [id])
+  parentId String?
+  parent   User?    @relation(fields: [parentId], references: [id])
+
+  results Result[]
+}
+
+model Class {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  level     Level
+  createdAt DateTime @default(now())
+
+  students       Student[]
+  subjects       Subject[]
+  classTeachers  ClassTeacher[]
+  results        Result[]
+}
+
+model Subject {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  classId       String
+  class         Class          @relation(fields: [classId], references: [id])
+  resultDetails ResultDetail[]
+}
+
+model AcademicSession {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  isCurrent Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  terms   Term[]
+  results Result[]
+}
+
+model Term {
+  id        String   @id @default(uuid())
+  name      String
+  isCurrent Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  sessionId String
+  session   AcademicSession @relation(fields: [sessionId], references: [id])
+  results   Result[]
+}
+
+model Result {
+  id              String   @id @default(uuid())
+  totalScore      Int      @default(0)
+  average         Float    @default(0)
+  position        Int?
+  teacherComment  String?
+  principalComment String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id])
+  classId   String
+  class     Class   @relation(fields: [classId], references: [id])
+  sessionId String
+  session   AcademicSession @relation(fields: [sessionId], references: [id])
+  termId    String
+  term      Term    @relation(fields: [termId], references: [id])
+  examOfficerId String
+  examOfficer   User          @relation("ExamOfficer", fields: [examOfficerId], references: [id])
+  formTeacherId String?
+  formTeacher   User?         @relation("FormTeacher", fields: [formTeacherId], references: [id])
+
+  details ResultDetail[]
+}
+
+model ResultDetail {
+  id       String @id @default(uuid())
+  ca1      Int    @default(0)
+  ca2      Int    @default(0)
+  exam     Int    @default(0)
+  total    Int    @default(0)
+  grade    String @default("F")
+  remark   String @default("Fail")
+
+  resultId  String
+  result    Result  @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id])
+
+  @@unique([resultId, subjectId])
+}
+
+model ClassTeacher {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId  String
+  user    User  @relation(fields: [userId], references: [id])
+  classId String
+  class   Class @relation(fields: [classId], references: [id])
+
+  @@unique([userId, classId])
+}
