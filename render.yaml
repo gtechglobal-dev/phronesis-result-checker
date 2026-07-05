@@ -17,9 +17,8 @@ services:
       - key: JWT_SECRET
         generateValue: true
 
-  - type: web
+  - type: static
     name: phronesis-frontend
-    runtime: static
     repo: https://github.com/gtechglobal-dev/phronesis-result-checker
     plan: free
     region: oregon
