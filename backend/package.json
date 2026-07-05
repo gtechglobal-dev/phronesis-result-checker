@@ -5,7 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node prisma/seed.js && node src/index.js",
+    "start": "node src/index.js",
     "build": "npx prisma generate",
     "postinstall": "npx prisma generate",
     "prisma:push": "npx prisma db push",

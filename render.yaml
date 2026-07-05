@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: phronesis-backend
+    runtime: node
+    repo: https://github.com/gtechglobal-dev/phronesis-result-checker
+    plan: free
+    region: oregon
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npx prisma db push && npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: DATABASE_URL
+        fromDatabase:
+          name: phronesis-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+
+  - type: web
+    name: phronesis-frontend
+    runtime: static
+    repo: https://github.com/gtechglobal-dev/phronesis-result-checker
+    plan: free
+    region: oregon
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: phronesis-backend
+          type: web
+          property: url
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+databases:
+  - name: phronesis-db
+    plan: free
+    region: oregon
+    databaseName: phronesis
