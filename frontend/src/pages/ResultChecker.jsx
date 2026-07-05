@@ -8,6 +8,7 @@ export default function ResultChecker() {
   const [sessions, setSessions] = useState([])
   const [result, setResult] = useState(null)
   const [student, setStudent] = useState(null)
+  const [withheld, setWithheld] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -25,10 +26,17 @@ export default function ResultChecker() {
     setError('')
     setResult(null)
     setStudent(null)
+    setWithheld(false)
     try {
       const res = await resultAPI.checkByRegNo({ regNo, sessionId, termId })
-      setStudent(res.data.student)
-      setResult(res.data.result)
+      if (res.data.withheld) {
+        setStudent(res.data.student)
+        setWithheld(true)
+        setError(res.data.message)
+      } else {
+        setStudent(res.data.student)
+        setResult(res.data.result)
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Result not found')
     } finally {
@@ -85,7 +93,12 @@ export default function ResultChecker() {
           </button>
         </form>
 
-        {error && <div className="mt-4 sm:mt-6 bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2.5 sm:py-3 rounded text-center text-sm">{error}</div>}
+        {error && !withheld && <div className="mt-4 sm:mt-6 bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2.5 sm:py-3 rounded text-center text-sm">{error}</div>}
+        {withheld && (
+          <div className="mt-4 sm:mt-6 bg-yellow-50 border border-yellow-200 text-yellow-800 px-3 sm:px-4 py-2.5 sm:py-3 rounded text-center text-sm">
+            {error}
+          </div>
+        )}
 
         {result && student && (
           <div className="mt-6 sm:mt-8">

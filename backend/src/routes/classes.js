@@ -27,7 +27,7 @@ router.post('/assign-teacher', auth, roleAuth('EXAM_OFFICER'), [
 router.get('/teachers/assignments', auth, roleAuth('EXAM_OFFICER'), classController.getFormTeachers)
 
 router.get('/my-assignment', auth, roleAuth('FORM_TEACHER'), classController.getMyAssignment)
-router.get('/sessions/all', auth, classController.getSessions)
+router.get('/sessions/all', classController.getSessions)
 
 router.post('/sessions', auth, roleAuth('EXAM_OFFICER'), [
   body('name').notEmpty().withMessage('Session name is required')
