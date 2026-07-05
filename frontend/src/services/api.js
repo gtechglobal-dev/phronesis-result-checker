@@ -64,4 +64,10 @@ export const resultAPI = {
   getFormTeacherResults: (params) => api.get('/results/my-class', { params })
 }
 
+export const pinAPI = {
+  generate: (data) => api.post('/pins/generate', data),
+  list: () => api.get('/pins'),
+  revoke: (id) => api.put(`/pins/${id}/revoke`)
+}
+
 export default api

@@ -7,6 +7,7 @@ import Signup from './pages/Signup'
 import ResultChecker from './pages/ResultChecker'
 import ExamOfficerDashboard from './pages/dashboard/ExamOfficerDashboard'
 import FormTeacherDashboard from './pages/dashboard/FormTeacherDashboard'
+import SubjectTeacherDashboard from './pages/dashboard/SubjectTeacherDashboard'
 import ParentDashboard from './pages/dashboard/ParentDashboard'
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -50,6 +51,11 @@ function App() {
             <Route path="/dashboard/form-teacher" element={
               <ProtectedRoute allowedRoles={['FORM_TEACHER']}>
                 <FormTeacherDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/subject-teacher" element={
+              <ProtectedRoute allowedRoles={['FORM_TEACHER']}>
+                <SubjectTeacherDashboard />
               </ProtectedRoute>
             } />
             <Route path="/dashboard/parent" element={

@@ -11,7 +11,13 @@ const calculateGrade = (score) => {
 
 exports.createResult = async (req, res) => {
   try {
-    const { studentId, classId, sessionId, termId, scores } = req.body
+    const { studentId, classId, className, sessionId, termId, scores } = req.body
+
+    if (className && !classId) {
+      const classRecord = await prisma.class.findUnique({ where: { name: className } })
+      if (!classRecord) return res.status(404).json({ message: 'Class not found' })
+      classId = classRecord.id
+    }
 
     const existing = await prisma.result.findFirst({
       where: { studentId, sessionId, termId }
@@ -132,9 +138,22 @@ exports.updatePositions = async (req, res) => {
 
 exports.checkByRegNo = async (req, res) => {
   try {
-    const { regNo, sessionId, termId } = req.query
+    const { regNo, sessionId, termId, pin } = req.query
     const student = await prisma.student.findUnique({ where: { regNo }, include: { class: true } })
     if (!student) return res.status(404).json({ message: 'Student not found' })
+
+    const pinRecord = await prisma.resultPin.findUnique({ where: { pin } })
+    if (!pinRecord || !pinRecord.isActive) return res.status(401).json({ message: 'Invalid or expired PIN' })
+    if (pinRecord.regNo !== regNo) return res.status(401).json({ message: 'PIN does not match this registration number' })
+    if (pinRecord.usedCount >= pinRecord.maxUses) {
+      await prisma.resultPin.update({ where: { id: pinRecord.id }, data: { isActive: false } })
+      return res.status(401).json({ message: 'PIN has expired (max uses reached)' })
+    }
+
+    await prisma.resultPin.update({
+      where: { id: pinRecord.id },
+      data: { usedCount: { increment: 1 } }
+    })
 
     const result = await prisma.result.findFirst({
       where: { studentId: student.id, sessionId, termId },
@@ -157,10 +176,14 @@ exports.checkByRegNo = async (req, res) => {
 
 exports.getFormTeacherClassResults = async (req, res) => {
   try {
-    const { sessionId, termId, classId: queryClassId } = req.query
+    const { sessionId, termId, classId: queryClassId, className } = req.query
 
     let classId
-    if (req.user.role === 'EXAM_OFFICER') {
+    if (className) {
+      const classRecord = await prisma.class.findUnique({ where: { name: className } })
+      if (!classRecord) return res.status(404).json({ message: 'Class not found' })
+      classId = classRecord.id
+    } else if (req.user.role === 'EXAM_OFFICER') {
       classId = queryClassId
       if (!classId) return res.status(400).json({ message: 'classId required for exam officer' })
     } else {

@@ -2,8 +2,10 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const prisma = require('../utils/prisma')
 
-const ADMIN_USERNAME = 'Admin'
-const ADMIN_PASSWORD = 'Phronesis2026'
+const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || 'Admin').split(',').map(s => s.trim())
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Phronesis2026'
+const STAFF_USERNAME = process.env.STAFF_USERNAME || 'Staff'
+const STAFF_PASSWORD = process.env.STAFF_PASSWORD || 'Staff2026'
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -60,7 +62,7 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body
 
-    if (email === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+    if (ADMIN_USERNAMES.includes(email) && password === ADMIN_PASSWORD) {
       let admin = await prisma.user.findFirst({ where: { role: 'EXAM_OFFICER' } })
       if (!admin) {
         const hashed = await bcrypt.hash(ADMIN_PASSWORD, 12)
@@ -73,6 +75,22 @@ exports.login = async (req, res) => {
         message: 'Login successful',
         token,
         user: { id: admin.id, email: admin.email, role: admin.role, firstName: admin.firstName, lastName: admin.lastName }
+      })
+    }
+
+    if (email === STAFF_USERNAME && password === STAFF_PASSWORD) {
+      let staff = await prisma.user.findFirst({ where: { role: 'FORM_TEACHER' } })
+      if (!staff) {
+        const hashed = await bcrypt.hash(STAFF_PASSWORD, 12)
+        staff = await prisma.user.create({
+          data: { email: 'staff@phronesis.com', password: hashed, firstName: 'Subject', lastName: 'Teacher', role: 'FORM_TEACHER' }
+        })
+      }
+      const token = generateToken(staff)
+      return res.json({
+        message: 'Login successful',
+        token,
+        user: { id: staff.id, email: staff.email, role: staff.role, firstName: staff.firstName, lastName: staff.lastName }
       })
     }
 

@@ -22,6 +22,20 @@ async function main() {
   })
   console.log('✓ Created exam officer')
 
+  const staffPassword = await bcrypt.hash('Staff2026', 12)
+  const staffUser = await prisma.user.upsert({
+    where: { email: 'staff@phronesis.com' },
+    update: {},
+    create: {
+      email: 'staff@phronesis.com',
+      password: staffPassword,
+      firstName: 'Subject',
+      lastName: 'Teacher',
+      role: 'FORM_TEACHER'
+    }
+  })
+  console.log('✓ Created subject teacher')
+
   const classNames = [
     { name: 'Montessori 1', level: 'MONTESSORI' },
     { name: 'Montessori 2', level: 'MONTESSORI' },
@@ -31,6 +45,7 @@ async function main() {
     { name: 'Primary 1', level: 'PRIMARY' },
     { name: 'Primary 2', level: 'PRIMARY' },
     { name: 'Primary 3', level: 'PRIMARY' },
+    { name: 'Primary 4', level: 'PRIMARY' },
     { name: 'Primary 4', level: 'PRIMARY' },
     { name: 'Primary 5', level: 'PRIMARY' },
     { name: 'Primary 6', level: 'PRIMARY' },
@@ -49,16 +64,48 @@ async function main() {
 
   const allClasses = await prisma.class.findMany()
 
-  const montessoriSubjects = ['Literacy', 'Numeracy', 'Sensorial', 'Practical Life', 'Art & Craft', 'Music & Movement', 'Physical Development', 'Social Skills']
-  const nurserySubjects = ['Mathematics', 'English Language', 'Basic Science', 'Social Habits', 'Writing', 'Rhymes', 'Art & Craft', 'Physical Education']
-  const primarySubjects = ['Mathematics', 'English Language', 'Basic Science', 'Social Studies', 'Computer Studies', 'Religious Studies', 'Creative Arts', 'Music', 'Physical Education', 'Home Economics']
-  const secondarySubjects = ['Mathematics', 'English Language', 'Biology', 'Chemistry', 'Physics', 'Government', 'Economics', 'Literature', 'History', 'Computer Science', 'Agricultural Science', 'Further Mathematics', 'Geography', 'Civic Education', 'Yoruba Language']
+  // Assign subject teacher to JSS 1
+  const jss1 = await prisma.class.findUnique({ where: { name: 'JSS 1' } })
+  if (jss1) {
+    await prisma.classTeacher.upsert({
+      where: { userId_classId: { userId: staffUser.id, classId: jss1.id } },
+      update: {},
+      create: { userId: staffUser.id, classId: jss1.id }
+    })
+    console.log('✓ Assigned subject teacher to JSS 1')
+  }
+
+  const subjectsList = [
+    'Accounting',
+    'Agricultural Science',
+    'Basic Science',
+    'Basic Tech',
+    'Biology',
+    'Business Studies',
+    'Chemistry',
+    'Christian Religious Studies',
+    'Civic Education',
+    'Commerce',
+    'Computer Studies',
+    'Cultural & Creative Arts',
+    'Digital Tech',
+    'Economics',
+    'English Studies',
+    'Geography',
+    'Government',
+    'Health Science',
+    'History',
+    'Literature',
+    'Marketing',
+    'Mathematics',
+    'Physical & Health Education',
+    'Physics'
+  ]
 
   for (const cls of allClasses) {
-    const subjects = cls.level === 'MONTESSORI' ? montessoriSubjects : cls.level === 'NURSERY' ? nurserySubjects : cls.level === 'PRIMARY' ? primarySubjects : secondarySubjects
     const existingSubjects = await prisma.subject.findMany({ where: { classId: cls.id }, select: { name: true } })
     const existingNames = new Set(existingSubjects.map(s => s.name))
-    const newSubjects = subjects.filter(s => !existingNames.has(s))
+    const newSubjects = subjectsList.filter(s => !existingNames.has(s))
     if (newSubjects.length > 0) {
       await prisma.subject.createMany({ data: newSubjects.map(name => ({ name, classId: cls.id })) })
     }

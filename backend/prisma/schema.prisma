@@ -35,6 +35,7 @@ model User {
   classAssignments ClassTeacher[]
   resultsCreated   Result[]      @relation("ExamOfficer")
   resultsCommented Result[]      @relation("FormTeacher")
+  generatedPins    ResultPin[]
 }
 
 model Student {
@@ -43,6 +44,7 @@ model Student {
   firstName String
   lastName  String
   arm       String   @default("A")
+  pin       String   @default("1234")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -139,6 +141,19 @@ model ResultDetail {
   subject   Subject @relation(fields: [subjectId], references: [id])
 
   @@unique([resultId, subjectId])
+}
+
+model ResultPin {
+  id          String   @id @default(uuid())
+  pin         String   @unique
+  regNo       String
+  maxUses     Int      @default(5)
+  usedCount   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  generatedBy String
+
+  generator   User     @relation(fields: [generatedBy], references: [id])
 }
 
 model ClassTeacher {

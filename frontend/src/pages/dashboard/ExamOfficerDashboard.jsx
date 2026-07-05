@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { classAPI, studentAPI, resultAPI, authAPI } from '../../services/api'
+import { classAPI, studentAPI, resultAPI, authAPI, pinAPI } from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
 
 export default function ExamOfficerDashboard() {
@@ -33,6 +33,11 @@ export default function ExamOfficerDashboard() {
   const [bulkStudents, setBulkStudents] = useState('')
   const [bulkClassId, setBulkClassId] = useState('')
 
+  const [pinRegNo, setPinRegNo] = useState('')
+  const [pinCount, setPinCount] = useState(1)
+  const [pinList, setPinList] = useState([])
+  const [pinLoading, setPinLoading] = useState(false)
+
   const [withholdList, setWithholdList] = useState([])
   const [withholdSession, setWithholdSession] = useState('')
   const [withholdTerm, setWithholdTerm] = useState('')
@@ -46,7 +51,8 @@ export default function ExamOfficerDashboard() {
     { id: 'sessions', label: 'Sessions' },
     { id: 'teachers', label: 'Teachers' },
     { id: 'withhold', label: 'Withhold' },
-    { id: 'bulk', label: 'Bulk Upload' }
+    { id: 'bulk', label: 'Bulk Upload' },
+    { id: 'pins', label: 'Generate PIN' }
   ]
 
   useEffect(() => {
@@ -209,6 +215,27 @@ export default function ExamOfficerDashboard() {
   const loadStudents = async (classId) => {
     try { setPageLoading(true); const res = await studentAPI.getAll({ classId }); setStudents(res.data) } catch (err) { console.error(err) } finally { setPageLoading(false) }
   }
+
+  const loadPins = async () => {
+    try { const res = await pinAPI.list(); setPinList(res.data) } catch (err) { console.error(err) }
+  }
+
+  const handleGeneratePin = async (e) => {
+    e.preventDefault()
+    setPinLoading(true)
+    try {
+      await pinAPI.generate({ regNo: pinRegNo, count: pinCount })
+      setMessage(`PIN(s) generated for ${pinRegNo}`)
+      setPinRegNo('')
+      setPinCount(1)
+      loadPins()
+    } catch (err) { setMessage(err.response?.data?.message || 'Error') }
+    finally { setPinLoading(false) }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'pins') loadPins()
+  }, [activeTab])
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
@@ -598,6 +625,82 @@ export default function ExamOfficerDashboard() {
                 {withholdList.length === 0 && <tr><td colSpan="4" className="text-center p-4 text-gray-400">Select class/session/term to view results</td></tr>}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'pins' && (
+        <div className="max-w-3xl mx-auto space-y-6">
+          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
+            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Generate Result PIN</h3>
+            <form onSubmit={handleGeneratePin} className="space-y-3">
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Registration Number</label>
+                <input type="text" required value={pinRegNo}
+                  onChange={(e) => setPinRegNo(e.target.value.toUpperCase())}
+                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm"
+                  placeholder="e.g., PHS/2025/001" />
+              </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Number of PINs</label>
+                <input type="number" required min="1" max="10" value={pinCount}
+                  onChange={(e) => setPinCount(Math.min(10, Math.max(1, parseInt(e.target.value) || 1)))}
+                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <button type="submit" disabled={pinLoading}
+                className="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-2.5 rounded-lg font-semibold transition disabled:opacity-50 text-sm flex items-center justify-center gap-2">
+                {pinLoading && <Spinner />} {pinLoading ? 'Generating...' : 'Generate PIN(s)'}
+              </button>
+            </form>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-base sm:text-lg text-[#1B5E20]">Generated PINs</h3>
+              <button onClick={loadPins} className="text-xs text-[#1B5E20] hover:text-yellow-600 font-medium transition">
+                Refresh
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs sm:text-sm">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="text-left p-2 sm:p-3 font-medium text-gray-600">PIN</th>
+                    <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Reg No</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600">Used</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600">Status</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pinList.map((p) => (
+                    <tr key={p.id} className="border-t hover:bg-gray-50">
+                      <td className="p-2 sm:p-3 font-mono font-bold">{p.pin}</td>
+                      <td className="p-2 sm:p-3">{p.regNo}</td>
+                      <td className="p-2 sm:p-3 text-center">{p.usedCount}/{p.maxUses}</td>
+                      <td className="p-2 sm:p-3 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[10px] sm:text-xs font-bold ${p.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {p.isActive ? 'Active' : 'Expired'}
+                        </span>
+                      </td>
+                      <td className="p-2 sm:p-3 text-center">
+                        {p.isActive ? (
+                          <button onClick={() => pinAPI.revoke(p.id).then(loadPins)}
+                            className="text-[10px] sm:text-xs px-2 sm:px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-medium transition">
+                            Revoke
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {pinList.length === 0 && (
+                    <tr><td colSpan="5" className="text-center p-4 text-gray-400">No PINs generated yet</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

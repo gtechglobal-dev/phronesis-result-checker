@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { resultAPI, classAPI } from '../services/api'
 
 export default function ResultChecker() {
   const [regNo, setRegNo] = useState('')
   const [sessionId, setSessionId] = useState('')
   const [termId, setTermId] = useState('')
+  const [pin, setPin] = useState('')
   const [sessions, setSessions] = useState([])
   const [result, setResult] = useState(null)
   const [student, setStudent] = useState(null)
@@ -18,7 +20,7 @@ export default function ResultChecker() {
 
   const handleSearch = async (e) => {
     e.preventDefault()
-    if (!regNo || !sessionId || !termId) {
+    if (!regNo || !sessionId || !termId || !pin) {
       setError('Please fill in all fields')
       return
     }
@@ -28,7 +30,7 @@ export default function ResultChecker() {
     setStudent(null)
     setWithheld(false)
     try {
-      const res = await resultAPI.checkByRegNo({ regNo, sessionId, termId })
+      const res = await resultAPI.checkByRegNo({ regNo, sessionId, termId, pin })
       if (res.data.withheld) {
         setStudent(res.data.student)
         setWithheld(true)
@@ -55,7 +57,7 @@ export default function ResultChecker() {
       <div className="bg-white rounded-2xl shadow-xl p-5 sm:p-8">
         <form onSubmit={handleSearch} className="space-y-3 sm:space-y-4">
           <div>
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Registration Number</label>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Reg. No.</label>
             <input
               type="text"
               required
@@ -67,11 +69,11 @@ export default function ResultChecker() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Session</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Year</label>
               <select required value={sessionId}
                 onChange={(e) => setSessionId(e.target.value)}
                 className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm">
-                <option value="">Select Session</option>
+                <option value="">Select Year</option>
                 {sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
@@ -86,6 +88,17 @@ export default function ResultChecker() {
                 ))}
               </select>
             </div>
+          </div>
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">PIN</label>
+            <input
+              type="password"
+              required
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] focus:border-transparent outline-none text-sm"
+              placeholder="Enter your PIN"
+            />
           </div>
           <button type="submit" disabled={loading}
             className="w-full bg-yellow-500 hover:bg-yellow-600 text-[#1B5E20] font-bold py-2.5 sm:py-3 rounded-lg transition text-base sm:text-lg disabled:opacity-50">
@@ -170,6 +183,15 @@ export default function ResultChecker() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="text-center mt-6">
+        <Link to="/" className="inline-flex items-center gap-2 text-[#1B5E20] hover:text-yellow-600 font-medium transition text-sm">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Home
+        </Link>
       </div>
     </div>
   )

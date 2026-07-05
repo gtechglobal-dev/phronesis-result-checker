@@ -2,9 +2,13 @@ const prisma = require('../utils/prisma')
 
 exports.getStudents = async (req, res) => {
   try {
-    const { classId, arm, search } = req.query
+    const { classId, className, arm, search } = req.query
     const where = {}
     if (classId) where.classId = classId
+    if (className) {
+      const classRecord = await prisma.class.findUnique({ where: { name: className } })
+      if (classRecord) where.classId = classRecord.id
+    }
     if (arm) where.arm = arm
     if (search) {
       where.OR = [
