@@ -7,6 +7,8 @@ const classRoutes = require('./routes/classes')
 const studentRoutes = require('./routes/students')
 const resultRoutes = require('./routes/results')
 const pinRoutes = require('./routes/pins')
+const subjectAssignmentRoutes = require('./routes/subjectAssignments')
+const subjectTeacherRoutes = require('./routes/subjectTeacher')
 
 const app = express()
 
@@ -22,6 +24,8 @@ app.use('/api/classes', classRoutes)
 app.use('/api/students', studentRoutes)
 app.use('/api/results', resultRoutes)
 app.use('/api/pins', pinRoutes)
+app.use('/api/subject-assignments', subjectAssignmentRoutes)
+app.use('/api/subject-teacher', subjectTeacherRoutes)
 
 app.use((err, req, res, next) => {
   console.error(err.stack)

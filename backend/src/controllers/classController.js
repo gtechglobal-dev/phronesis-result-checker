@@ -3,7 +3,10 @@ const prisma = require('../utils/prisma')
 exports.getClasses = async (req, res) => {
   try {
     const classes = await prisma.class.findMany({
-      include: { _count: { select: { students: true, subjects: true } } },
+      include: {
+        _count: { select: { students: true, subjects: true } },
+        subjects: { orderBy: { name: 'asc' } }
+      },
       orderBy: { name: 'asc' }
     })
     res.json(classes)

@@ -164,3 +164,19 @@ exports.getMe = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message })
   }
 }
+
+exports.getTeachers = async (req, res) => {
+  try {
+    const teachers = await prisma.user.findMany({
+      where: { role: 'FORM_TEACHER' },
+      select: { id: true, email: true, firstName: true, lastName: true, role: true,
+        classAssignments: { include: { class: true } },
+        subjectAssignments: { include: { subject: true, class: true } }
+      },
+      orderBy: { firstName: 'asc' }
+    })
+    res.json(teachers)
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message })
+  }
+}

@@ -9,5 +9,6 @@ router.post('/login', authController.login)
 router.get('/me', protect, authController.getMe)
 
 router.post('/create-teacher', protect, authorize('EXAM_OFFICER'), authController.createTeacher)
+router.get('/teachers', protect, authorize('EXAM_OFFICER'), authController.getTeachers)
 
 module.exports = router

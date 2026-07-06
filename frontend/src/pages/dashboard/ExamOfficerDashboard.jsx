@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { classAPI, studentAPI, resultAPI, authAPI, pinAPI } from '../../services/api'
+import { classAPI, studentAPI, resultAPI, authAPI, pinAPI, subjectAssignmentAPI } from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
 
 export default function ExamOfficerDashboard() {
@@ -38,6 +38,11 @@ export default function ExamOfficerDashboard() {
   const [pinList, setPinList] = useState([])
   const [pinLoading, setPinLoading] = useState(false)
 
+  const [subjectAssignForm, setSubjectAssignForm] = useState({ userId: '', subjectId: '', classId: '' })
+  const [subjectAssignList, setSubjectAssignList] = useState([])
+  const [teachers, setTeachers] = useState([])
+  const [subjectAssignLoading, setSubjectAssignLoading] = useState(false)
+
   const [withholdList, setWithholdList] = useState([])
   const [withholdSession, setWithholdSession] = useState('')
   const [withholdTerm, setWithholdTerm] = useState('')
@@ -52,7 +57,8 @@ export default function ExamOfficerDashboard() {
     { id: 'teachers', label: 'Teachers' },
     { id: 'withhold', label: 'Withhold' },
     { id: 'bulk', label: 'Bulk Upload' },
-    { id: 'pins', label: 'Generate PIN' }
+    { id: 'pins', label: 'Generate PIN' },
+    { id: 'subject-assign', label: 'Subject Assignments' }
   ]
 
   useEffect(() => {
@@ -78,6 +84,45 @@ export default function ExamOfficerDashboard() {
   useEffect(() => {
     if (withholdClass && withholdSession && withholdTerm) loadWithholdResults()
   }, [withholdClass, withholdSession, withholdTerm])
+
+  useEffect(() => {
+    if (activeTab === 'subject-assign') {
+      loadTeachers()
+      loadSubjectAssignments()
+    }
+  }, [activeTab])
+
+  const loadTeachers = async () => {
+    try { const res = await authAPI.getTeachers(); setTeachers(res.data) } catch {}
+  }
+
+  const loadSubjectAssignments = async () => {
+    try {
+      const res = await subjectAssignmentAPI.list()
+      setSubjectAssignList(res.data)
+    } catch {}
+  }
+
+  const handleCreateSubjectAssignment = async (e) => {
+    e.preventDefault()
+    setSubjectAssignLoading(true)
+    try {
+      await subjectAssignmentAPI.create(subjectAssignForm)
+      setMessage('Subject assignment created')
+      setSubjectAssignForm({ userId: '', subjectId: '', classId: '' })
+      loadSubjectAssignments()
+    } catch (err) { setMessage(err.response?.data?.message || 'Error') }
+    finally { setSubjectAssignLoading(false) }
+  }
+
+  const handleRemoveSubjectAssignment = async (id) => {
+    if (!window.confirm('Remove this assignment?')) return
+    try {
+      await subjectAssignmentAPI.remove(id)
+      setMessage('Assignment removed')
+      loadSubjectAssignments()
+    } catch {}
+  }
 
   const handleCreateStudent = async (e) => {
     e.preventDefault()
@@ -697,6 +742,84 @@ export default function ExamOfficerDashboard() {
                   ))}
                   {pinList.length === 0 && (
                     <tr><td colSpan="5" className="text-center p-4 text-gray-400">No PINs generated yet</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'subject-assign' && (
+        <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
+          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
+            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Assign Teacher to Subject</h3>
+            <form onSubmit={handleCreateSubjectAssignment} className="space-y-3">
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Teacher</label>
+                <select required value={subjectAssignForm.userId}
+                  onChange={(e) => setSubjectAssignForm({ ...subjectAssignForm, userId: e.target.value })}
+                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
+                  <option value="">Select Teacher</option>
+                  {teachers.map((t) => <option key={t.id} value={t.id}>{t.firstName} {t.lastName} ({t.email})</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Class</label>
+                <select required value={subjectAssignForm.classId}
+                  onChange={(e) => setSubjectAssignForm({ ...subjectAssignForm, classId: e.target.value })}
+                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
+                  <option value="">Select Class</option>
+                  {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Subject</label>
+                <select required value={subjectAssignForm.subjectId}
+                  onChange={(e) => setSubjectAssignForm({ ...subjectAssignForm, subjectId: e.target.value })}
+                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
+                  <option value="">Select Subject</option>
+                  {classes.filter(c => c.id === subjectAssignForm.classId).flatMap(c => c.subjects || []).map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                {!subjectAssignForm.classId && <p className="text-xs text-gray-400 mt-1">Select a class first</p>}
+              </div>
+              <button type="submit" disabled={subjectAssignLoading}
+                className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition disabled:opacity-50 text-sm flex items-center justify-center gap-2">
+                {subjectAssignLoading && <Spinner />} {subjectAssignLoading ? 'Assigning...' : 'Assign Subject'}
+              </button>
+            </form>
+          </div>
+          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-base sm:text-lg text-[#1B5E20]">Subject Assignments</h3>
+              <button onClick={loadSubjectAssignments} className="text-xs text-[#1B5E20] hover:text-yellow-600 font-medium transition">Refresh</button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs sm:text-sm">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Teacher</th>
+                    <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Class</th>
+                    <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Subject</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subjectAssignList.map((a) => (
+                    <tr key={a.id} className="border-t hover:bg-gray-50">
+                      <td className="p-2 sm:p-3 whitespace-nowrap font-medium">{a.user?.firstName} {a.user?.lastName}</td>
+                      <td className="p-2 sm:p-3 whitespace-nowrap">{a.class?.name}</td>
+                      <td className="p-2 sm:p-3 whitespace-nowrap">{a.subject?.name}</td>
+                      <td className="p-2 sm:p-3 text-center">
+                        <button onClick={() => handleRemoveSubjectAssignment(a.id)}
+                          className="text-[10px] sm:text-xs px-2 sm:px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-medium transition">Remove</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {subjectAssignList.length === 0 && (
+                    <tr><td colSpan="4" className="text-center p-4 text-gray-400">No assignments yet</td></tr>
                   )}
                 </tbody>
               </table>

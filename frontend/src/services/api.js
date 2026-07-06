@@ -25,7 +25,8 @@ export const authAPI = {
   login: (data) => api.post('/auth/login', data),
   register: (data) => api.post('/auth/register', data),
   getMe: () => api.get('/auth/me'),
-  createTeacher: (data) => api.post('/auth/create-teacher', data)
+  createTeacher: (data) => api.post('/auth/create-teacher', data),
+  getTeachers: () => api.get('/auth/teachers')
 }
 
 export const classAPI = {
@@ -68,6 +69,20 @@ export const pinAPI = {
   generate: (data) => api.post('/pins/generate', data),
   list: () => api.get('/pins'),
   revoke: (id) => api.put(`/pins/${id}/revoke`)
+}
+
+export const subjectAssignmentAPI = {
+  create: (data) => api.post('/subject-assignments', data),
+  list: (params) => api.get('/subject-assignments', { params }),
+  getMy: () => api.get('/subject-assignments/my'),
+  remove: (id) => api.delete(`/subject-assignments/${id}`)
+}
+
+export const subjectTeacherAPI = {
+  getAssignment: () => api.get('/subject-teacher/assignment'),
+  getScores: (params) => api.get('/subject-teacher/scores', { params }),
+  saveScores: (data) => api.post('/subject-teacher/scores', data),
+  submitScores: (data) => api.post('/subject-teacher/submit', data)
 }
 
 export default api
