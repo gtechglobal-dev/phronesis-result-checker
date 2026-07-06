@@ -15,7 +15,7 @@ export default function ResultChecker() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    classAPI.getSessions().then(res => setSessions(res.data)).catch(() => {})
+    classAPI.getSessions().then(res => { if (Array.isArray(res.data)) setSessions(res.data) }).catch(() => {})
   }, [])
 
   const handleSearch = async (e) => {
