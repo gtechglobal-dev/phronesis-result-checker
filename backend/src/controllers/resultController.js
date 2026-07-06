@@ -159,7 +159,7 @@ exports.checkByRegNo = async (req, res) => {
       where: { studentId: student.id, sessionId, termId },
       include: {
         details: { include: { subject: true }, orderBy: { subject: { name: 'asc' } } },
-        class: true, session: true, term: true
+        class: true, session: { include: { terms: true } }, term: true
       }
     })
     if (!result) return res.status(404).json({ message: 'Result not found for this session/term' })
@@ -168,12 +168,56 @@ exports.checkByRegNo = async (req, res) => {
       return res.json({ withheld: true, message: 'Result withheld. Please clear fees.', student, result: null })
     }
 
-    res.json({ student, result })
+    res.json({
+      student,
+      result: {
+        ...result,
+        daysOpen: result.term.daysOpen,
+        nextResumptionDate: result.term.nextResumptionDate
+      }
+    })
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })
   }
 }
 
+exports.updatePrincipalComment = async (req, res) => {
+  try {
+    const { principalComment } = req.body
+    const result = await prisma.result.update({
+      where: { id: req.params.id },
+      data: { principalComment }
+    })
+    res.json(result)
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message })
+  }
+}
+
+exports.getPendingResults = async (req, res) => {
+  try {
+    const { sessionId, termId, classId } = req.query
+    const where = { status: 'SUBMITTED' }
+    if (sessionId) where.sessionId = sessionId
+    if (termId) where.termId = termId
+    if (classId) where.classId = classId
+
+    const results = await prisma.result.findMany({
+      where,
+      include: {
+        student: true,
+        class: true,
+        session: true,
+        term: true,
+        details: { include: { subject: true } }
+      },
+      orderBy: [{ class: { name: 'asc' } }, { student: { lastName: 'asc' } }]
+    })
+    res.json(results)
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message })
+  }
+}
 exports.getFormTeacherClassResults = async (req, res) => {
   try {
     const { sessionId, termId, classId: queryClassId, className } = req.query

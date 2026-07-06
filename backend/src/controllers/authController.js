@@ -119,9 +119,14 @@ exports.login = async (req, res) => {
 
 exports.createTeacher = async (req, res) => {
   try {
-    const { firstName, lastName, email, password, classIds } = req.body
+    const { firstName, lastName, email, password, classId } = req.body
     const existing = await prisma.user.findUnique({ where: { email } })
-    if (existing) return res.status(400).json({ message: 'Email already in use' })
+    if (existing) return res.status(400).json({ message: 'Username already in use' })
+
+    if (classId) {
+      const existingAssignment = await prisma.classTeacher.findUnique({ where: { classId } })
+      if (existingAssignment) return res.status(400).json({ message: 'This class already has a form teacher' })
+    }
 
     const hashedPassword = await bcrypt.hash(password, 12)
 
@@ -135,18 +140,40 @@ exports.createTeacher = async (req, res) => {
       }
     })
 
-    if (classIds && classIds.length > 0) {
-      for (const classId of classIds) {
-        await prisma.classTeacher.create({
-          data: { userId: teacher.id, classId }
-        }).catch(() => {})
-      }
+    if (classId) {
+      await prisma.classTeacher.create({
+        data: { userId: teacher.id, classId }
+      })
     }
 
     res.status(201).json({
       message: 'Teacher created',
       teacher: { id: teacher.id, email: teacher.email, firstName: teacher.firstName, lastName: teacher.lastName, role: teacher.role }
     })
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message })
+  }
+}
+
+exports.cancelAssignment = async (req, res) => {
+  try {
+    const { id } = req.params
+    const assignment = await prisma.classTeacher.findFirst({ where: { userId: id } })
+    if (!assignment) return res.status(404).json({ message: 'No assignment found for this teacher' })
+    await prisma.classTeacher.delete({ where: { id: assignment.id } })
+    res.json({ message: 'Assignment cancelled' })
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message })
+  }
+}
+
+exports.changePassword = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { password } = req.body
+    const hashedPassword = await bcrypt.hash(password, 12)
+    await prisma.user.update({ where: { id }, data: { password: hashedPassword } })
+    res.json({ message: 'Password changed' })
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })
   }

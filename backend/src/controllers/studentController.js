@@ -156,3 +156,30 @@ exports.getStudentsByClass = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message })
   }
 }
+
+exports.generateExamNumbers = async (req, res) => {
+  try {
+    const { classId, count } = req.body
+    if (!classId || !count) return res.status(400).json({ message: 'classId and count required' })
+
+    const lastStudent = await prisma.student.findFirst({
+      where: { regNo: { startsWith: 'PHS' } },
+      orderBy: { regNo: 'desc' }
+    })
+
+    let nextNum = 1
+    if (lastStudent) {
+      const match = lastStudent.regNo.match(/PHS(\d{5})/)
+      if (match) nextNum = parseInt(match[1]) + 1
+    }
+
+    const numbers = []
+    for (let i = 0; i < count; i++) {
+      numbers.push(`PHS${String(nextNum + i).padStart(5, '0')}`)
+    }
+
+    res.json({ numbers })
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message })
+  }
+}

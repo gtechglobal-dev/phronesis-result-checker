@@ -18,11 +18,13 @@ export default function Navbar() {
     ? '/dashboard/form-teacher'
     : '/dashboard/parent'
 
+  const roleLabel = user?.role === 'FORM_TEACHER' ? 'SUBJECT TEACHER' : user?.role.replace('_', ' ')
+
   const navLinks = user
     ? [
         { label: 'Dashboard', to: dashboardPath },
         { label: 'Check Result', to: '/check-result' },
-        { label: `${user.firstName} (${user.role.replace('_', ' ')})`, to: '#', className: 'text-yellow-400' },
+        { label: `${user.firstName} (${roleLabel})`, to: '#', className: 'text-yellow-400' },
         { label: 'Logout', to: '#', onClick: handleLogout, className: 'bg-yellow-600 hover:bg-yellow-700 px-4 py-1.5 rounded' }
       ]
     : [

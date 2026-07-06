@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom'
 import { resultAPI, classAPI } from '../services/api'
 
 export default function ResultChecker() {
+  const getOrdinalSuffix = (n) => {
+    const s = ['th', 'st', 'nd', 'rd'], v = n % 100
+    return s[(v - 20) % 10] || s[v] || s[0]
+  }
+
   const [regNo, setRegNo] = useState('')
   const [sessionId, setSessionId] = useState('')
   const [termId, setTermId] = useState('')
@@ -114,71 +119,107 @@ export default function ResultChecker() {
         )}
 
         {result && student && (
-          <div className="mt-6 sm:mt-8">
-            <div className="bg-[#1B5E20] text-white p-4 sm:p-6 rounded-t-xl">
-              <div>
-                <h2 className="text-lg sm:text-xl font-bold">{student.firstName} {student.lastName}</h2>
-                <p className="text-yellow-400 text-xs sm:text-sm mt-1">{result.class.name} - {result.session.name} ({result.term.name})</p>
-                <p className="text-gray-300 text-xs mt-0.5">Reg No: {student.regNo} | Arm: {student.arm}</p>
+          <div className="mt-6 sm:mt-8 print-area" id="result-sheet">
+            <div className="bg-white rounded-xl shadow-md p-5 sm:p-8 print:shadow-none print:p-4 print:rounded-none">
+              <div className="text-center border-b-2 border-[#1B5E20] pb-4 mb-6 print:pb-3 print:mb-4">
+                <img src="/school logo.png" alt="Phronesis Int'l School" className="h-16 w-16 sm:h-20 sm:w-20 mx-auto mb-3 print:h-16 print:w-16" />
+                <h1 className="text-2xl sm:text-3xl font-bold text-[#1B5E20] tracking-tight">PHRONESIS INT'L SCHOOL</h1>
+                <p className="text-sm text-gray-500 mt-1">...Building a legacy of excellence</p>
+                <h2 className="text-lg sm:text-xl font-bold text-[#1B5E20] mt-2 uppercase tracking-wide">Result Sheet</h2>
               </div>
-            </div>
 
-            <div className="border-x border-b rounded-b-xl overflow-x-auto">
-              <table className="w-full text-xs sm:text-sm min-w-[500px]">
-                <thead>
-                  <tr className="bg-gray-50">
-                    <th className="text-left p-2 sm:p-3 font-medium text-gray-600 whitespace-nowrap">Subject</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 whitespace-nowrap">CA1</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 whitespace-nowrap">CA2</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 whitespace-nowrap">Exam</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 whitespace-nowrap">Total</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 whitespace-nowrap">Grade</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 whitespace-nowrap">Remark</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.details.map((d) => (
-                    <tr key={d.id} className="border-t hover:bg-gray-50">
-                      <td className="p-2 sm:p-3 font-medium whitespace-nowrap">{d.subject.name}</td>
-                      <td className="p-2 sm:p-3 text-center whitespace-nowrap">{d.ca1}</td>
-                      <td className="p-2 sm:p-3 text-center whitespace-nowrap">{d.ca2}</td>
-                      <td className="p-2 sm:p-3 text-center whitespace-nowrap">{d.exam}</td>
-                      <td className="p-2 sm:p-3 text-center font-bold whitespace-nowrap">{d.total}</td>
-                      <td className="p-2 sm:p-3 text-center whitespace-nowrap">
-                        <span className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-bold ${
-                          d.grade === 'A' ? 'bg-green-100 text-green-700' :
-                          d.grade === 'B' ? 'bg-blue-100 text-blue-700' :
-                          d.grade === 'C' ? 'bg-yellow-100 text-yellow-700' :
-                          d.grade === 'D' ? 'bg-orange-100 text-orange-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>{d.grade}</span>
-                      </td>
-                      <td className="p-2 sm:p-3 text-center text-[10px] sm:text-xs whitespace-nowrap">{d.remark}</td>
+              <div className="mb-6 print:mb-4">
+                <table className="w-full text-sm">
+                  <tbody>
+                    <tr><td className="py-1 font-semibold text-gray-700 w-40">Student Name:</td><td className="py-1 font-bold text-gray-900">{student.lastName} {student.firstName}</td></tr>
+                    <tr><td className="py-1 font-semibold text-gray-700">Exam No:</td><td className="py-1 font-bold text-gray-900">{student.regNo}</td></tr>
+                    <tr><td className="py-1 font-semibold text-gray-700">Class:</td><td className="py-1 font-bold text-gray-900">{result.class.name}</td></tr>
+                    <tr><td className="py-1 font-semibold text-gray-700">Term:</td><td className="py-1 font-bold text-gray-900">{result.session.name} - {result.term.name}</td></tr>
+                    <tr><td className="py-1 font-semibold text-gray-700">Position:</td><td className="py-1 font-bold text-gray-900">{result.position || '-'}{result.position ? getOrdinalSuffix(result.position) : ''}</td></tr>
+                    <tr><td className="py-1 font-semibold text-gray-700">Total Score:</td><td className="py-1 font-bold text-gray-900">{result.totalScore}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-3 border-b border-gray-200 pb-2">RESULTS</h3>
+              <div className="overflow-x-auto mb-6">
+                <table className="w-full text-xs sm:text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-[#1B5E20] text-white">
+                      <th className="p-2 sm:p-3 text-center font-semibold w-10">S/N</th>
+                      <th className="p-2 sm:p-3 text-left font-semibold">SUBJECT</th>
+                      <th className="p-2 sm:p-3 text-center font-semibold">CA1 (20)</th>
+                      <th className="p-2 sm:p-3 text-center font-semibold">CA2 (20)</th>
+                      <th className="p-2 sm:p-3 text-center font-semibold">EXAM (60)</th>
+                      <th className="p-2 sm:p-3 text-center font-semibold">TOTAL</th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-gray-50 font-bold border-t-2 border-gray-200">
-                    <td className="p-2 sm:p-3 text-xs sm:text-sm" colSpan="4">Total: {result.totalScore} | Avg: {result.average}</td>
-                    <td className="p-2 sm:p-3 text-center text-xs sm:text-sm" colSpan="3">Pos: {result.position || '-'}</td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </thead>
+                  <tbody>
+                    {result.details.map((d, i) => (
+                      <tr key={d.id} className={`border-b ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-yellow-50`}>
+                        <td className="p-2 sm:p-3 text-center font-medium">{i + 1}</td>
+                        <td className="p-2 sm:p-3 font-medium">{d.subject.name}</td>
+                        <td className="p-2 sm:p-3 text-center">{d.ca1}</td>
+                        <td className="p-2 sm:p-3 text-center">{d.ca2}</td>
+                        <td className="p-2 sm:p-3 text-center font-semibold">{d.exam}</td>
+                        <td className={`p-2 sm:p-3 text-center font-bold ${d.total >= 80 ? 'text-green-700' : d.total >= 60 ? 'text-blue-700' : 'text-red-700'}`}>{d.total}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mb-6 print:mb-4">
+                <h4 className="font-bold text-sm text-[#1B5E20] mb-2">ATTENDANCE</h4>
+                <table className="w-full text-xs sm:text-sm">
+                  <tbody>
+                    <tr><td className="py-1 text-gray-700 w-48">Number of Times School Opened:</td><td className="py-1 font-bold">{result.daysOpen ?? '-'}</td></tr>
+                    <tr><td className="py-1 text-gray-700">Number of Times Present:</td><td className="py-1 font-bold text-green-700">{result.daysPresent ?? '-'}</td></tr>
+                    <tr><td className="py-1 text-gray-700">Number of Times Absent:</td><td className="py-1 font-bold text-red-700">{result.daysAbsent ?? '-'}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-4 mb-6 print:mb-4">
+                {result.teacherComment && (
+                  <div className="p-3 sm:p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <h4 className="font-semibold text-sm text-[#1B5E20] mb-1">Form Teacher's Remark</h4>
+                    <p className="text-gray-700 text-sm">{result.teacherComment}</p>
+                  </div>
+                )}
+                {result.principalComment && (
+                  <div className="p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <h4 className="font-semibold text-sm text-[#1B5E20] mb-1">Principal's Remark</h4>
+                    <p className="text-gray-700 text-sm">{result.principalComment}</p>
+                  </div>
+                )}
+                {result.nextResumptionDate && (
+                  <div className="p-3 sm:p-4 bg-green-50 rounded-lg border border-green-200">
+                    <h4 className="font-semibold text-sm text-[#1B5E20] mb-1">Next Resumption Date</h4>
+                    <p className="text-gray-700 text-sm font-bold">{new Date(result.nextResumptionDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="text-center pt-4 border-t border-gray-200">
+                <p className="text-[10px] sm:text-xs text-gray-400 italic">
+                  This result is computer-generated and does not require a signature. Phronesis Int'l School - Building a legacy of excellence.
+                </p>
+              </div>
             </div>
 
-            {result.teacherComment && (
-              <div className="mt-4 p-3 sm:p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                <h4 className="font-semibold text-sm sm:text-base text-[#1B5E20]">Teacher's Comment</h4>
-                <p className="text-gray-700 mt-1 text-xs sm:text-sm">{result.teacherComment}</p>
-              </div>
-            )}
-
-            <div className="mt-4 sm:mt-6 text-center">
+            <div className="mt-4 sm:mt-6 text-center print:hidden">
               <button
                 onClick={() => window.print()}
-                className="bg-[#1B5E20] text-white px-6 sm:px-8 py-2 sm:py-2.5 rounded-lg font-medium hover:bg-[#2E7D32] transition text-sm sm:text-base"
+                className="bg-[#1B5E20] text-white px-8 py-2.5 rounded-lg font-medium hover:bg-[#2E7D32] transition text-sm sm:text-base mr-3"
               >
-                Print Result
+                Download PDF
+              </button>
+              <button
+                onClick={() => { setResult(null); setStudent(null); }}
+                className="bg-gray-100 text-gray-600 px-8 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition text-sm sm:text-base"
+              >
+                Check Another
               </button>
             </div>
           </div>

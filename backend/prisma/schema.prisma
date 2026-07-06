@@ -95,6 +95,8 @@ model Term {
   id        String   @id @default(uuid())
   name      String
   isCurrent Boolean  @default(false)
+  daysOpen  Int?
+  nextResumptionDate String?
   createdAt DateTime @default(now())
 
   sessionId String
@@ -111,6 +113,8 @@ model Result {
   status          String   @default("DRAFT")
   teacherComment  String?
   principalComment String?
+  daysPresent     Int?
+  daysAbsent      Int?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -166,7 +170,7 @@ model ClassTeacher {
 
   userId  String
   user    User  @relation(fields: [userId], references: [id])
-  classId String
+  classId String @unique
   class   Class @relation(fields: [classId], references: [id])
 
   @@unique([userId, classId])

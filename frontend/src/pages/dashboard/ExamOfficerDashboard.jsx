@@ -1,20 +1,16 @@
 import { useState, useEffect } from 'react'
-import { classAPI, studentAPI, resultAPI, authAPI, pinAPI, subjectAssignmentAPI } from '../../services/api'
+import { classAPI, studentAPI, resultAPI, authAPI, pinAPI } from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
 
 export default function ExamOfficerDashboard() {
   const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState('students')
+  const [activeTab, setActiveTab] = useState('results')
   const [classes, setClasses] = useState([])
-  const [students, setStudents] = useState([])
   const [sessions, setSessions] = useState([])
   const [subjects, setSubjects] = useState([])
   const [message, setMessage] = useState('')
   const [pageLoading, setPageLoading] = useState(false)
-  const [studentLoading, setStudentLoading] = useState(false)
   const [bulkLoading, setBulkLoading] = useState(false)
-  const [classLoading, setClassLoading] = useState(false)
-  const [subjectLoading, setSubjectLoading] = useState(false)
   const [resultLoading, setResultLoading] = useState(false)
   const [sessionLoading, setSessionLoading] = useState(false)
   const [termLoading, setTermLoading] = useState(false)
@@ -22,13 +18,18 @@ export default function ExamOfficerDashboard() {
   const [positionLoading, setPositionLoading] = useState(false)
   const [withholdLoading, setWithholdLoading] = useState(null)
 
-  const [studentForm, setStudentForm] = useState({ regNo: '', firstName: '', lastName: '', classId: '', arm: 'A' })
-  const [classForm, setClassForm] = useState({ name: '', level: 'PRIMARY' })
-  const [subjectForm, setSubjectForm] = useState({ name: '', classId: '' })
+  const [pendingResults, setPendingResults] = useState([])
+  const [pendingSession, setPendingSession] = useState('')
+  const [pendingTerm, setPendingTerm] = useState('')
+  const [pendingClass, setPendingClass] = useState('')
+  const [pendingLoading, setPendingLoading] = useState(false)
+  const [principalCommentText, setPrincipalCommentText] = useState({})
+  const [principalSaving, setPrincipalSaving] = useState(null)
+
   const [resultForm, setResultForm] = useState({ studentId: '', classId: '', sessionId: '', termId: '', scores: [] })
   const [sessionForm, setSessionForm] = useState({ name: '', isCurrent: false })
   const [termForm, setTermForm] = useState({ name: '', sessionId: '', isCurrent: false })
-  const [teacherForm, setTeacherForm] = useState({ firstName: '', lastName: '', email: '', password: '', classIds: [] })
+  const [teacherForm, setTeacherForm] = useState({ firstName: '', lastName: '', email: '', password: '', classId: '' })
   const [positionsForm, setPositionsForm] = useState({ classId: '', sessionId: '', termId: '' })
   const [bulkStudents, setBulkStudents] = useState('')
   const [bulkClassId, setBulkClassId] = useState('')
@@ -38,27 +39,19 @@ export default function ExamOfficerDashboard() {
   const [pinList, setPinList] = useState([])
   const [pinLoading, setPinLoading] = useState(false)
 
-  const [subjectAssignForm, setSubjectAssignForm] = useState({ userId: '', subjectId: '', classId: '' })
-  const [subjectAssignList, setSubjectAssignList] = useState([])
-  const [teachers, setTeachers] = useState([])
-  const [subjectAssignLoading, setSubjectAssignLoading] = useState(false)
-
   const [withholdList, setWithholdList] = useState([])
   const [withholdSession, setWithholdSession] = useState('')
   const [withholdTerm, setWithholdTerm] = useState('')
   const [withholdClass, setWithholdClass] = useState('')
 
   const tabs = [
-    { id: 'students', label: 'Students' },
-    { id: 'classes', label: 'Classes' },
-    { id: 'subjects', label: 'Subjects' },
     { id: 'results', label: 'Results' },
     { id: 'sessions', label: 'Sessions' },
-    { id: 'teachers', label: 'Teachers' },
+    { id: 'teachers', label: 'Form Teachers' },
+    { id: 'pending', label: 'Pending' },
     { id: 'withhold', label: 'Withhold' },
     { id: 'bulk', label: 'Bulk Upload' },
-    { id: 'pins', label: 'Generate PIN' },
-    { id: 'subject-assign', label: 'Subject Assignments' }
+    { id: 'pins', label: 'Generate PIN' }
   ]
 
   useEffect(() => {
@@ -85,54 +78,26 @@ export default function ExamOfficerDashboard() {
     if (withholdClass && withholdSession && withholdTerm) loadWithholdResults()
   }, [withholdClass, withholdSession, withholdTerm])
 
-  useEffect(() => {
-    if (activeTab === 'subject-assign') {
-      loadTeachers()
-      loadSubjectAssignments()
-    }
-  }, [activeTab])
-
-  const loadTeachers = async () => {
-    try { const res = await authAPI.getTeachers(); setTeachers(res.data) } catch {}
+  const loadPendingResults = async () => {
+    if (!pendingSession || !pendingTerm) return
+    setPendingLoading(true)
+    try {
+      const params = { sessionId: pendingSession, termId: pendingTerm }
+      if (pendingClass) params.classId = pendingClass
+      const res = await resultAPI.getPendingResults(params)
+      setPendingResults(res.data)
+    } catch (err) { console.error(err) }
+    finally { setPendingLoading(false) }
   }
 
-  const loadSubjectAssignments = async () => {
+  const handleSavePrincipalComment = async (resultId) => {
+    setPrincipalSaving(resultId)
     try {
-      const res = await subjectAssignmentAPI.list()
-      setSubjectAssignList(res.data)
-    } catch {}
-  }
-
-  const handleCreateSubjectAssignment = async (e) => {
-    e.preventDefault()
-    setSubjectAssignLoading(true)
-    try {
-      await subjectAssignmentAPI.create(subjectAssignForm)
-      setMessage('Subject assignment created')
-      setSubjectAssignForm({ userId: '', subjectId: '', classId: '' })
-      loadSubjectAssignments()
+      await resultAPI.updatePrincipalComment(resultId, { principalComment: principalCommentText[resultId] || '' })
+      setMessage('Principal comment saved')
+      loadPendingResults()
     } catch (err) { setMessage(err.response?.data?.message || 'Error') }
-    finally { setSubjectAssignLoading(false) }
-  }
-
-  const handleRemoveSubjectAssignment = async (id) => {
-    if (!window.confirm('Remove this assignment?')) return
-    try {
-      await subjectAssignmentAPI.remove(id)
-      setMessage('Assignment removed')
-      loadSubjectAssignments()
-    } catch {}
-  }
-
-  const handleCreateStudent = async (e) => {
-    e.preventDefault()
-    setStudentLoading(true)
-    try {
-      await studentAPI.create(studentForm)
-      setMessage('Student created')
-      setStudentForm({ regNo: '', firstName: '', lastName: '', classId: '', arm: 'A' })
-    } catch (err) { setMessage(err.response?.data?.message || 'Error') }
-    finally { setStudentLoading(false) }
+    finally { setPrincipalSaving(null) }
   }
 
   const handleBulkUpload = async (e) => {
@@ -149,29 +114,6 @@ export default function ExamOfficerDashboard() {
       setBulkStudents('')
     } catch (err) { setMessage(err.response?.data?.message || 'Error') }
     finally { setBulkLoading(false) }
-  }
-
-  const handleCreateClass = async (e) => {
-    e.preventDefault()
-    setClassLoading(true)
-    try {
-      await classAPI.create(classForm)
-      setMessage('Class created')
-      setClassForm({ name: '', level: 'PRIMARY' })
-      loadClasses()
-    } catch (err) { setMessage(err.response?.data?.message || 'Error') }
-    finally { setClassLoading(false) }
-  }
-
-  const handleCreateSubject = async (e) => {
-    e.preventDefault()
-    setSubjectLoading(true)
-    try {
-      await classAPI.createSubject(subjectForm)
-      setMessage('Subject created')
-      setSubjectForm({ name: '', classId: '' })
-    } catch (err) { setMessage(err.response?.data?.message || 'Error') }
-    finally { setSubjectLoading(false) }
   }
 
   const handleCreateResult = async (e) => {
@@ -215,7 +157,7 @@ export default function ExamOfficerDashboard() {
     try {
       await authAPI.createTeacher(teacherForm)
       setMessage('Teacher created')
-      setTeacherForm({ firstName: '', lastName: '', email: '', password: '', classIds: [] })
+      setTeacherForm({ firstName: '', lastName: '', email: '', password: '', classId: '' })
     } catch (err) { setMessage(err.response?.data?.message || 'Error') }
     finally { setTeacherLoading(false) }
   }
@@ -255,10 +197,6 @@ export default function ExamOfficerDashboard() {
 
   const loadSubjects = async (classId) => {
     try { const res = await classAPI.getSubjects(classId); setSubjects(res.data) } catch (err) { console.error(err) }
-  }
-
-  const loadStudents = async (classId) => {
-    try { setPageLoading(true); const res = await studentAPI.getAll({ classId }); setStudents(res.data) } catch (err) { console.error(err) } finally { setPageLoading(false) }
   }
 
   const loadPins = async () => {
@@ -306,59 +244,6 @@ export default function ExamOfficerDashboard() {
         ))}
       </div>
 
-      {activeTab === 'students' && (
-        <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
-          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Add Student</h3>
-            <form onSubmit={handleCreateStudent} className="space-y-3">
-              <input type="text" placeholder="Registration No." required value={studentForm.regNo}
-                onChange={(e) => setStudentForm({ ...studentForm, regNo: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm" />
-              <div className="grid grid-cols-2 gap-3">
-                <input type="text" placeholder="First Name" required value={studentForm.firstName}
-                  onChange={(e) => setStudentForm({ ...studentForm, firstName: e.target.value })}
-                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm" />
-                <input type="text" placeholder="Last Name" required value={studentForm.lastName}
-                  onChange={(e) => setStudentForm({ ...studentForm, lastName: e.target.value })}
-                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm" />
-              </div>
-              <select required value={studentForm.classId}
-                onChange={(e) => setStudentForm({ ...studentForm, classId: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
-                <option value="">Select Class</option>
-                {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <input type="text" placeholder="Arm (A, B, C...)" value={studentForm.arm}
-                onChange={(e) => setStudentForm({ ...studentForm, arm: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
-              <button type="submit" disabled={studentLoading}
-                className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition disabled:opacity-50 text-sm flex items-center justify-center gap-2">
-                {studentLoading && <Spinner />} {studentLoading ? 'Adding...' : 'Add Student'}
-              </button>
-            </form>
-          </div>
-          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Students List</h3>
-            <select onChange={(e) => loadStudents(e.target.value)} className="w-full mb-4 px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
-              <option value="">Filter by Class</option>
-              {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <div className="max-h-96 overflow-y-auto space-y-2">
-              {students.map((s) => (
-                <div key={s.id} className="flex justify-between items-center gap-1 p-3 bg-gray-50 rounded-lg text-sm">
-                  <div className="truncate">
-                    <span className="font-medium">{s.firstName} {s.lastName}</span>
-                    <span className="text-gray-500 text-xs ml-1 sm:ml-2">({s.regNo})</span>
-                  </div>
-                  <span className="text-[10px] sm:text-xs bg-[#1B5E20] text-white px-2 py-1 rounded shrink-0">{s.class?.name} {s.arm}</span>
-                </div>
-              ))}
-              {!pageLoading && students.length === 0 && <p className="text-gray-400 text-xs sm:text-sm text-center py-4">No students found</p>}
-            </div>
-          </div>
-        </div>
-      )}
-
       {activeTab === 'bulk' && (
         <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-md p-5 sm:p-6">
           <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Bulk Upload Students</h3>
@@ -377,80 +262,6 @@ export default function ExamOfficerDashboard() {
               {bulkLoading && <Spinner />} {bulkLoading ? 'Uploading...' : 'Upload Students'}
             </button>
           </form>
-        </div>
-      )}
-
-      {activeTab === 'classes' && (
-        <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
-          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Add Class</h3>
-            <form onSubmit={handleCreateClass} className="space-y-3">
-              <select value={classForm.level} onChange={(e) => setClassForm({ ...classForm, level: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
-                <option value="MONTESSORI">Montessori</option>
-                <option value="NURSERY">Nursery</option>
-                <option value="PRIMARY">Primary</option>
-                <option value="SECONDARY">Secondary</option>
-              </select>
-              <input type="text" placeholder="Class Name (e.g., Primary 1)" required value={classForm.name}
-                onChange={(e) => setClassForm({ ...classForm, name: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
-              <button type="submit" disabled={classLoading}
-                className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition disabled:opacity-50 text-sm flex items-center justify-center gap-2">
-                {classLoading && <Spinner />} {classLoading ? 'Adding...' : 'Add Class'}
-              </button>
-            </form>
-          </div>
-          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">All Classes</h3>
-            <div className="space-y-2">
-              {classes.map((c) => (
-                <div key={c.id} className="flex justify-between items-center gap-1 p-3 bg-gray-50 rounded-lg text-sm">
-                  <span className="font-medium">{c.name}</span>
-                  <div className="flex gap-3 text-xs text-gray-500">
-                    <span>{c._count.students} students</span>
-                    <span>{c._count.subjects} subjects</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'subjects' && (
-        <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
-          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Add Subject</h3>
-            <form onSubmit={handleCreateSubject} className="space-y-3">
-              <select required value={subjectForm.classId}
-                onChange={(e) => setSubjectForm({ ...subjectForm, classId: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
-                <option value="">Select Class</option>
-                {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <input type="text" placeholder="Subject Name" required value={subjectForm.name}
-                onChange={(e) => setSubjectForm({ ...subjectForm, name: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
-              <button type="submit" disabled={subjectLoading}
-                className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition disabled:opacity-50 text-sm flex items-center justify-center gap-2">
-                {subjectLoading && <Spinner />} {subjectLoading ? 'Adding...' : 'Add Subject'}
-              </button>
-            </form>
-          </div>
-          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Subjects by Class</h3>
-            <select onChange={(e) => loadSubjects(e.target.value)} className="w-full mb-3 px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
-              <option value="">Select Class</option>
-              {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <div className="flex flex-wrap gap-1.5 sm:gap-2">
-              {subjects.map((s) => (
-                <span key={s.id} className="bg-gray-100 text-gray-700 px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs">{s.name}</span>
-              ))}
-              {subjects.length === 0 && <p className="text-gray-400 text-xs sm:text-sm">Select a class to view subjects</p>}
-            </div>
-          </div>
         </div>
       )}
 
@@ -589,18 +400,18 @@ export default function ExamOfficerDashboard() {
                   onChange={(e) => setTeacherForm({ ...teacherForm, lastName: e.target.value })}
                   className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
               </div>
-              <input type="email" placeholder="Email (login)" required value={teacherForm.email}
+              <input type="text" placeholder="Username (login)" required value={teacherForm.email}
                 onChange={(e) => setTeacherForm({ ...teacherForm, email: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
               <input type="text" placeholder="Temporary Password" required value={teacherForm.password}
                 onChange={(e) => setTeacherForm({ ...teacherForm, password: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm" />
-              <select multiple value={teacherForm.classIds}
-                onChange={(e) => setTeacherForm({ ...teacherForm, classIds: Array.from(e.target.selectedOptions, o => o.value) })}
-                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm h-32">
+              <select required value={teacherForm.classId}
+                onChange={(e) => setTeacherForm({ ...teacherForm, classId: e.target.value })}
+                className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
+                <option value="">Assign Class</option>
                 {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-              <p className="text-[10px] sm:text-xs text-gray-400">Hold Ctrl/Cmd to select multiple classes</p>
               <button type="submit" disabled={teacherLoading}
                 className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition disabled:opacity-50 text-sm flex items-center justify-center gap-2">
                 {teacherLoading && <Spinner />} {teacherLoading ? 'Creating...' : 'Create Teacher'}
@@ -609,7 +420,75 @@ export default function ExamOfficerDashboard() {
           </div>
           <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
             <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Teacher Assignments</h3>
-            <TeacherAssignments />
+            <TeacherAssignments setMessage={setMessage} />
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'pending' && (
+        <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
+          <h3 className="font-bold text-lg text-[#1B5E20] mb-4">Pending Results (Submitted by Form Teachers)</h3>
+          <div className="flex flex-wrap gap-2 sm:gap-3 mb-4">
+            <select value={pendingSession} onChange={(e) => setPendingSession(e.target.value)}
+              className="px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
+              <option value="">Select Session</option>
+              {sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <select value={pendingTerm} onChange={(e) => setPendingTerm(e.target.value)}
+              className="px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
+              <option value="">Select Term</option>
+              {sessions.filter(s => s.id === pendingSession).flatMap(s => s.terms).map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            <select value={pendingClass} onChange={(e) => setPendingClass(e.target.value)}
+              className="px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
+              <option value="">All Classes</option>
+              {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <button onClick={loadPendingResults} disabled={!pendingSession || !pendingTerm || pendingLoading}
+              className="bg-[#1B5E20] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#2E7D32] transition disabled:opacity-50">
+              {pendingLoading ? 'Loading...' : 'Load'}
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs sm:text-sm">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Student</th>
+                  <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Class</th>
+                  <th className="text-center p-2 sm:p-3 font-medium text-gray-600">Total</th>
+                  <th className="text-center p-2 sm:p-3 font-medium text-gray-600">Pos</th>
+                  <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Principal's Remark</th>
+                  <th className="text-center p-2 sm:p-3 font-medium text-gray-600">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingResults.map((r) => (
+                  <tr key={r.id} className="border-t hover:bg-gray-50">
+                    <td className="p-2 sm:p-3 font-medium whitespace-nowrap">{r.student?.firstName} {r.student?.lastName}</td>
+                    <td className="p-2 sm:p-3">{r.class?.name}</td>
+                    <td className="p-2 sm:p-3 text-center font-bold">{r.totalScore}</td>
+                    <td className="p-2 sm:p-3 text-center">{r.position || '-'}</td>
+                    <td className="p-2 sm:p-3">
+                      <input type="text"
+                        value={principalCommentText[r.id] ?? r.principalComment ?? ''}
+                        onChange={(e) => setPrincipalCommentText(prev => ({ ...prev, [r.id]: e.target.value }))}
+                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs" placeholder="Add principal remark..." />
+                    </td>
+                    <td className="p-2 sm:p-3 text-center">
+                      <button onClick={() => handleSavePrincipalComment(r.id)} disabled={principalSaving === r.id}
+                        className="text-[10px] sm:text-xs px-2 sm:px-3 py-1 rounded bg-[#1B5E20] text-white font-medium hover:bg-[#2E7D32] transition disabled:opacity-50">
+                        {principalSaving === r.id ? '...' : 'Save'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {pendingResults.length === 0 && (
+                  <tr><td colSpan="6" className="text-center p-4 text-gray-400">No pending results found</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -750,84 +629,6 @@ export default function ExamOfficerDashboard() {
         </div>
       )}
 
-      {activeTab === 'subject-assign' && (
-        <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
-          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Assign Teacher to Subject</h3>
-            <form onSubmit={handleCreateSubjectAssignment} className="space-y-3">
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Teacher</label>
-                <select required value={subjectAssignForm.userId}
-                  onChange={(e) => setSubjectAssignForm({ ...subjectAssignForm, userId: e.target.value })}
-                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
-                  <option value="">Select Teacher</option>
-                  {teachers.map((t) => <option key={t.id} value={t.id}>{t.firstName} {t.lastName} ({t.email})</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Class</label>
-                <select required value={subjectAssignForm.classId}
-                  onChange={(e) => setSubjectAssignForm({ ...subjectAssignForm, classId: e.target.value })}
-                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
-                  <option value="">Select Class</option>
-                  {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Subject</label>
-                <select required value={subjectAssignForm.subjectId}
-                  onChange={(e) => setSubjectAssignForm({ ...subjectAssignForm, subjectId: e.target.value })}
-                  className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
-                  <option value="">Select Subject</option>
-                  {classes.filter(c => c.id === subjectAssignForm.classId).flatMap(c => c.subjects || []).map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-                {!subjectAssignForm.classId && <p className="text-xs text-gray-400 mt-1">Select a class first</p>}
-              </div>
-              <button type="submit" disabled={subjectAssignLoading}
-                className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition disabled:opacity-50 text-sm flex items-center justify-center gap-2">
-                {subjectAssignLoading && <Spinner />} {subjectAssignLoading ? 'Assigning...' : 'Assign Subject'}
-              </button>
-            </form>
-          </div>
-          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-base sm:text-lg text-[#1B5E20]">Subject Assignments</h3>
-              <button onClick={loadSubjectAssignments} className="text-xs text-[#1B5E20] hover:text-yellow-600 font-medium transition">Refresh</button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs sm:text-sm">
-                <thead>
-                  <tr className="bg-gray-50">
-                    <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Teacher</th>
-                    <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Class</th>
-                    <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Subject</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {subjectAssignList.map((a) => (
-                    <tr key={a.id} className="border-t hover:bg-gray-50">
-                      <td className="p-2 sm:p-3 whitespace-nowrap font-medium">{a.user?.firstName} {a.user?.lastName}</td>
-                      <td className="p-2 sm:p-3 whitespace-nowrap">{a.class?.name}</td>
-                      <td className="p-2 sm:p-3 whitespace-nowrap">{a.subject?.name}</td>
-                      <td className="p-2 sm:p-3 text-center">
-                        <button onClick={() => handleRemoveSubjectAssignment(a.id)}
-                          className="text-[10px] sm:text-xs px-2 sm:px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-medium transition">Remove</button>
-                      </td>
-                    </tr>
-                  ))}
-                  {subjectAssignList.length === 0 && (
-                    <tr><td colSpan="4" className="text-center p-4 text-gray-400">No assignments yet</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
       {activeTab === 'positions' && (
         <div className="max-w-md mx-auto bg-white rounded-xl shadow-md p-5 sm:p-6">
           <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Update Student Positions</h3>
@@ -872,20 +673,84 @@ function Spinner({ small }) {
   )
 }
 
-function TeacherAssignments() {
-  const [assignments, setAssignments] = useState([])
-  useEffect(() => {
-    classAPI.getTeachers().then(res => setAssignments(res.data)).catch(() => {})
-  }, [])
+function TeacherAssignments({ setMessage }) {
+  const [teachers, setTeachers] = useState([])
+  const [pwModal, setPwModal] = useState(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [pwLoading, setPwLoading] = useState(false)
+  const loadTeachers = () => {
+    authAPI.getTeachers().then(res => setTeachers(res.data)).catch(() => {})
+  }
+  useEffect(loadTeachers, [])
+  const handleCancel = async (id) => {
+    if (!confirm('Cancel this teacher\'s class assignment?')) return
+    try {
+      await authAPI.cancelAssignment(id)
+      loadTeachers()
+      setMessage('Assignment cancelled')
+    } catch { setMessage('Error cancelling assignment') }
+  }
+  const handleChangePw = async () => {
+    if (!newPassword) return
+    setPwLoading(true)
+    try {
+      await authAPI.changePassword(pwModal, { password: newPassword })
+      setMessage('Password changed')
+      setPwModal(null)
+      setNewPassword('')
+    } catch { setMessage('Error changing password') }
+    finally { setPwLoading(false) }
+  }
   return (
-    <div className="space-y-2">
-      {assignments.map((a) => (
-        <div key={a.id} className="p-3 bg-gray-50 rounded-lg flex justify-between items-center gap-1 text-sm">
-          <span className="font-medium">{a.user.firstName} {a.user.lastName}</span>
-          <span className="text-xs text-gray-500">{a.class.name}</span>
+    <>
+      <div className="space-y-2">
+        {teachers.map((t) => {
+          const cls = t.classAssignments?.[0]?.class
+          return (
+            <div key={t.id} className="p-3 bg-gray-50 rounded-lg text-sm">
+              <div className="flex justify-between items-center gap-1">
+                <div>
+                  <span className="font-medium">{t.firstName} {t.lastName}</span>
+                  <span className="text-gray-400 ml-2">({t.email})</span>
+                </div>
+                {cls ? (
+                  <span className="text-xs bg-[#1B5E20] text-white px-2 py-1 rounded shrink-0">{cls.name}</span>
+                ) : (
+                  <span className="text-xs text-gray-400">Unassigned</span>
+                )}
+              </div>
+              <div className="flex gap-2 mt-2">
+                {cls && (
+                  <button onClick={() => handleCancel(t.id)}
+                    className="text-xs text-red-600 hover:text-red-800 font-medium">Cancel Assignment</button>
+                )}
+                <button onClick={() => setPwModal(t.id)}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium">Change Password</button>
+              </div>
+            </div>
+          )
+        })}
+        {teachers.length === 0 && <p className="text-gray-400 text-xs sm:text-sm text-center py-4">No form teachers yet</p>}
+      </div>
+      {pwModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setPwModal(null); setNewPassword('') }} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="font-bold text-base text-[#1B5E20] mb-4">Change Password</h3>
+            <input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="New Password" required
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm mb-3" />
+            <div className="flex gap-2">
+              <button onClick={() => { setPwModal(null); setNewPassword('') }}
+                className="flex-1 bg-gray-100 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition">Cancel</button>
+              <button onClick={handleChangePw} disabled={!newPassword || pwLoading}
+                className="flex-1 bg-[#1B5E20] text-white py-2 rounded-lg text-sm font-medium hover:bg-[#2E7D32] transition disabled:opacity-50">
+                {pwLoading ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
         </div>
-      ))}
-      {assignments.length === 0 && <p className="text-gray-400 text-xs sm:text-sm text-center py-4">No assignments yet</p>}
-    </div>
+      )}
+    </>
   )
 }

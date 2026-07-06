@@ -46,7 +46,6 @@ exports.getMyAssignment = async (req, res) => {
       where: { userId: req.user.id },
       include: { subject: true, class: true }
     })
-    if (!assignments.length) return res.status(404).json({ message: 'No subject assignments found' })
     res.json(assignments)
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })

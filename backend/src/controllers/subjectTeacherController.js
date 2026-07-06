@@ -9,7 +9,6 @@ exports.getAssignment = async (req, res) => {
         class: { include: { students: { orderBy: { lastName: 'asc' } } } }
       }
     })
-    if (!assignments.length) return res.status(404).json({ message: 'No subject assignments found' })
     res.json(assignments)
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })

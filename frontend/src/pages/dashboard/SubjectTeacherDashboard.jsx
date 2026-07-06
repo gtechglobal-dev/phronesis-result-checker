@@ -2,8 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { subjectTeacherAPI, classAPI } from '../../services/api'
 
 export default function SubjectTeacherDashboard() {
-  const [assignments, setAssignments] = useState([])
-  const [selectedAssignment, setSelectedAssignment] = useState(null)
+  const [classes, setClasses] = useState([])
+  const [subjects, setSubjects] = useState([])
+  const [selectedClassId, setSelectedClassId] = useState('')
+  const [selectedSubjectId, setSelectedSubjectId] = useState('')
   const [students, setStudents] = useState([])
   const [scores, setScores] = useState({})
   const [submitted, setSubmitted] = useState(false)
@@ -13,6 +15,8 @@ export default function SubjectTeacherDashboard() {
   const [saving, setSaving] = useState(false)
   const [selectedSession, setSelectedSession] = useState('')
   const [selectedTerm, setSelectedTerm] = useState('')
+  const [selectedTermName, setSelectedTermName] = useState('')
+  const [selectedSessionName, setSelectedSessionName] = useState('')
   const timerRef = useRef(null)
   const pendingSaveRef = useRef(null)
 
@@ -24,17 +28,24 @@ export default function SubjectTeacherDashboard() {
   useEffect(() => {
     const init = async () => {
       try {
-        const [assignRes, sessRes] = await Promise.all([
-          subjectTeacherAPI.getAssignment(),
+        const [classRes, sessRes] = await Promise.all([
+          classAPI.getAll(),
           classAPI.getSessions()
         ])
-        setAssignments(assignRes.data)
+        setClasses(classRes.data)
         setSessions(sessRes.data)
-        if (assignRes.data.length) {
-          setSelectedAssignment(assignRes.data[0])
+        if (sessRes.data.length) {
+          const current = sessRes.data.find(s => s.isCurrent) || sessRes.data[0]
+          setSelectedSession(current.id)
+          setSelectedSessionName(current.name)
+          if (current.terms?.length) {
+            const t = current.terms.find(t => t.isCurrent) || current.terms[0]
+            setSelectedTerm(t.id)
+            setSelectedTermName(t.name)
+          }
         }
       } catch {
-        showMessage('error', 'Failed to load assignment data')
+        showMessage('error', 'Failed to load data')
       } finally {
         setLoading(false)
       }
@@ -43,19 +54,14 @@ export default function SubjectTeacherDashboard() {
   }, [])
 
   useEffect(() => {
-    if (sessions.length > 0) {
-      const current = sessions.find(s => s.isCurrent) || sessions[0]
-      setSelectedSession(current.id)
-      if (current.terms?.length) {
-        setSelectedTerm(current.terms.find(t => t.isCurrent)?.id || current.terms[0].id)
-      }
-    }
-  }, [sessions])
+    if (!selectedClassId) { setSubjects([]); return }
+    classAPI.getSubjects(selectedClassId).then(res => setSubjects(res.data)).catch(() => {})
+  }, [selectedClassId])
 
   useEffect(() => {
-    if (!selectedAssignment || !selectedSession || !selectedTerm) return
+    if (!selectedClassId || !selectedSubjectId || !selectedSession || !selectedTerm) return
     loadScores()
-  }, [selectedAssignment, selectedSession, selectedTerm])
+  }, [selectedClassId, selectedSubjectId, selectedSession, selectedTerm])
 
   const loadScores = async () => {
     try {
@@ -63,8 +69,8 @@ export default function SubjectTeacherDashboard() {
       const res = await subjectTeacherAPI.getScores({
         sessionId: selectedSession,
         termId: selectedTerm,
-        classId: selectedAssignment.class.id,
-        subjectId: selectedAssignment.subject.id
+        classId: selectedClassId,
+        subjectId: selectedSubjectId
       })
       setStudents(res.data.students || [])
       setScores(res.data.scores || {})
@@ -98,8 +104,8 @@ export default function SubjectTeacherDashboard() {
       subjectTeacherAPI.saveScores({
         sessionId: selectedSession,
         termId: selectedTerm,
-        classId: selectedAssignment.class.id,
-        subjectId: selectedAssignment.subject.id,
+        classId: selectedClassId,
+        subjectId: selectedSubjectId,
         scores: scoresArr
       }).then(() => {
         showMessage('success', 'Scores saved')
@@ -107,7 +113,7 @@ export default function SubjectTeacherDashboard() {
         showMessage('error', err.response?.data?.message || 'Error saving scores')
       }).finally(() => setSaving(false))
     }, 1500)
-  }, [scores, students, submitted, selectedSession, selectedTerm, selectedAssignment])
+  }, [scores, students, submitted, selectedSession, selectedTerm, selectedClassId, selectedSubjectId])
 
   const handleSubmit = async () => {
     if (!window.confirm('Submit scores? This action cannot be undone.')) return
@@ -116,8 +122,8 @@ export default function SubjectTeacherDashboard() {
       await subjectTeacherAPI.submitScores({
         sessionId: selectedSession,
         termId: selectedTerm,
-        classId: selectedAssignment.class.id,
-        subjectId: selectedAssignment.subject.id
+        classId: selectedClassId,
+        subjectId: selectedSubjectId
       })
       setSubmitted(true)
       showMessage('success', 'Scores submitted successfully')
@@ -159,144 +165,112 @@ export default function SubjectTeacherDashboard() {
         </div>
       )}
 
-      {!assignments.length ? (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm">
-          You have no subject assignments. Contact the exam officer.
-        </div>
-      ) : (
-        <>
-          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            {assignments.length > 1 && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Select Assignment</label>
-                <select value={selectedAssignment?.id || ''} onChange={(e) => {
-                  const a = assignments.find(x => x.id === e.target.value)
-                  setSelectedAssignment(a)
-                }} className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                  {assignments.map(a => (
-                    <option key={a.id} value={a.id}>{a.class.name} - {a.subject.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Class</label>
-                <div className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 font-medium text-[#1B5E20]">
-                  {selectedAssignment?.class?.name || '-'}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Subject</label>
-                <div className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 font-medium text-[#1B5E20]">
-                  {selectedAssignment?.subject?.name || '-'}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Students</label>
-                <div className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 font-medium">
-                  {students.length} students
-                </div>
-              </div>
+      <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Session</label>
+            <div className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 font-medium text-[#1B5E20]">
+              {selectedSessionName || '-'}
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Session</label>
-                <select value={selectedSession} onChange={(e) => setSelectedSession(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm">
-                  {sessions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Term</label>
-                <select value={selectedTerm} onChange={(e) => setSelectedTerm(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm">
-                  {sessions.filter(s => s.id === selectedSession).flatMap(s => s.terms || []).map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {submitted && (
-              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg mb-6 text-sm font-medium">
-                Scores already submitted. Cannot make further changes.
-              </div>
-            )}
-
-            {students.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs sm:text-sm min-w-[700px]">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-12">S/N</th>
-                      <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Student Name</th>
-                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Reg No</th>
-                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">CA1 (20)</th>
-                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">CA2 (20)</th>
-                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Exam (70)</th>
-                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {students.map((student, idx) => {
-                      const form = scores[student.id] || {}
-                      return (
-                        <tr key={student.id} className="border-t hover:bg-gray-50">
-                          <td className="text-center p-2 sm:p-3 text-gray-500">{idx + 1}</td>
-                          <td className="p-2 sm:p-3 font-medium whitespace-nowrap">{student.firstName} {student.lastName}</td>
-                          <td className="text-center p-2 sm:p-3 text-gray-500 text-xs">{student.regNo}</td>
-                          <td className="p-2 sm:p-3 text-center">
-                            <input type="number" min="0" max="20" value={form.ca1 ?? ''}
-                              onChange={(e) => updateScore(student.id, 'ca1', e.target.value)}
-                              disabled={submitted}
-                              className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
-                          </td>
-                          <td className="p-2 sm:p-3 text-center">
-                            <input type="number" min="0" max="20" value={form.ca2 ?? ''}
-                              onChange={(e) => updateScore(student.id, 'ca2', e.target.value)}
-                              disabled={submitted}
-                              className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
-                          </td>
-                          <td className="p-2 sm:p-3 text-center">
-                            <input type="number" min="0" max="70" value={form.exam ?? ''}
-                              onChange={(e) => updateScore(student.id, 'exam', e.target.value)}
-                              disabled={submitted}
-                              className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
-                          </td>
-                          <td className="p-2 sm:p-3 text-center font-bold">{getTotal(form)}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-gray-50 font-bold">
-                      <td className="p-2 sm:p-3" colSpan="3"></td>
-                      <td className="p-2 sm:p-3 text-center text-xs text-gray-500">Max 20</td>
-                      <td className="p-2 sm:p-3 text-center text-xs text-gray-500">Max 20</td>
-                      <td className="p-2 sm:p-3 text-center text-xs text-gray-500">Max 70</td>
-                      <td className="p-2 sm:p-3 text-center text-xs text-gray-500">Max 110</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            ) : (
-              <p className="text-yellow-600 text-sm text-center py-4">No students found in this class.</p>
-            )}
-
-            {students.length > 0 && !submitted && (
-              <div className="mt-6 flex justify-center gap-4">
-                <button onClick={handleSubmit} disabled={saving}
-                  className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white px-8 py-2.5 rounded-lg font-semibold transition disabled:opacity-50 text-sm">
-                  {saving ? 'Submitting...' : 'Submit Scores'}
-                </button>
-              </div>
-            )}
           </div>
-        </>
-      )}
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Term</label>
+            <div className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 font-medium text-[#1B5E20]">
+              {selectedTermName || '-'}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Class</label>
+            <select value={selectedClassId} onChange={(e) => { setSelectedClassId(e.target.value); setSelectedSubjectId('') }}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm">
+              <option value="">Select Class</option>
+              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Subject</label>
+            <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" disabled={!selectedClassId}>
+              <option value="">Select Subject</option>
+              {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {!selectedClassId || !selectedSubjectId ? (
+          <p className="text-gray-400 text-center py-8">Select a class and subject to begin.</p>
+        ) : submitted ? (
+          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg mb-6 text-sm font-medium">
+            Scores already submitted. Cannot make further changes.
+          </div>
+        ) : students.length > 0 ? (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs sm:text-sm min-w-[700px]">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-12">S/N</th>
+                    <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Student Name</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Reg No</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">CA1 (20)</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">CA2 (20)</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Exam (70)</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.map((student, idx) => {
+                    const form = scores[student.id] || {}
+                    return (
+                      <tr key={student.id} className="border-t hover:bg-gray-50">
+                        <td className="text-center p-2 sm:p-3 text-gray-500">{idx + 1}</td>
+                        <td className="p-2 sm:p-3 font-medium whitespace-nowrap">{student.firstName} {student.lastName}</td>
+                        <td className="text-center p-2 sm:p-3 text-gray-500 text-xs">{student.regNo}</td>
+                        <td className="p-2 sm:p-3 text-center">
+                          <input type="number" min="0" max="20" value={form.ca1 ?? ''}
+                            onChange={(e) => updateScore(student.id, 'ca1', e.target.value)}
+                            disabled={submitted}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
+                        </td>
+                        <td className="p-2 sm:p-3 text-center">
+                          <input type="number" min="0" max="20" value={form.ca2 ?? ''}
+                            onChange={(e) => updateScore(student.id, 'ca2', e.target.value)}
+                            disabled={submitted}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
+                        </td>
+                        <td className="p-2 sm:p-3 text-center">
+                          <input type="number" min="0" max="70" value={form.exam ?? ''}
+                            onChange={(e) => updateScore(student.id, 'exam', e.target.value)}
+                            disabled={submitted}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
+                        </td>
+                        <td className="p-2 sm:p-3 text-center font-bold">{getTotal(form)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-50 font-bold">
+                    <td className="p-2 sm:p-3" colSpan="3"></td>
+                    <td className="p-2 sm:p-3 text-center text-xs text-gray-500">Max 20</td>
+                    <td className="p-2 sm:p-3 text-center text-xs text-gray-500">Max 20</td>
+                    <td className="p-2 sm:p-3 text-center text-xs text-gray-500">Max 70</td>
+                    <td className="p-2 sm:p-3 text-center text-xs text-gray-500">Max 110</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <div className="mt-6 flex justify-center gap-4">
+              <button onClick={handleSubmit} disabled={saving}
+                className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white px-8 py-2.5 rounded-lg font-semibold transition disabled:opacity-50 text-sm">
+                {saving ? 'Submitting...' : 'Submit Scores'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="text-yellow-600 text-sm text-center py-4">No students found in this class.</p>
+        )}
+      </div>
     </div>
   )
 }

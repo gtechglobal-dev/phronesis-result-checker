@@ -26,7 +26,9 @@ export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   getMe: () => api.get('/auth/me'),
   createTeacher: (data) => api.post('/auth/create-teacher', data),
-  getTeachers: () => api.get('/auth/teachers')
+  getTeachers: () => api.get('/auth/teachers'),
+  cancelAssignment: (id) => api.put(`/auth/teachers/${id}/cancel-assignment`),
+  changePassword: (id, data) => api.put(`/auth/teachers/${id}/change-password`, data)
 }
 
 export const classAPI = {
@@ -55,11 +57,13 @@ export const studentAPI = {
 
 export const resultAPI = {
   checkByRegNo: (params) => api.get('/results/check', { params }),
+  getPendingResults: (params) => api.get('/results/pending', { params }),
   getStudentResults: (studentId) => api.get(`/results/student/${studentId}`),
   getParentChildrenResults: () => api.get('/results/parent-children'),
   getById: (id) => api.get(`/results/${id}`),
   create: (data) => api.post('/results', data),
   addComment: (id, data) => api.put(`/results/${id}/comment`, data),
+  updatePrincipalComment: (id, data) => api.put(`/results/${id}/principal-comment`, data),
   toggleWithhold: (id, data) => api.put(`/results/${id}/withhold`, data),
   updatePositions: (data) => api.post('/results/positions', data),
   getFormTeacherResults: (params) => api.get('/results/my-class', { params })
@@ -83,6 +87,14 @@ export const subjectTeacherAPI = {
   getScores: (params) => api.get('/subject-teacher/scores', { params }),
   saveScores: (data) => api.post('/subject-teacher/scores', data),
   submitScores: (data) => api.post('/subject-teacher/submit', data)
+}
+
+export const formTeacherAPI = {
+  getBroadsheet: (params) => api.get('/form-teacher/broadsheet', { params }),
+  updateComment: (data) => api.put('/form-teacher/comment', data),
+  updateSettings: (data) => api.post('/form-teacher/settings', data),
+  updateAttendance: (data) => api.post('/form-teacher/attendance', data),
+  submitBroadsheet: (data) => api.post('/form-teacher/submit', data)
 }
 
 export default api
