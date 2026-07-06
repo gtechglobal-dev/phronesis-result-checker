@@ -111,7 +111,7 @@ export default function Login() {
           <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-[#1B5E20] to-[#2E7D32] shadow-lg mb-4 sm:mb-5">
             <img src="/school logo.png" alt="Phronesis" className="w-16 h-16 sm:w-20 sm:h-20 rounded-full" />
           </div>
-          <h1 className="text-2xl sm:text-4xl font-bold text-[#1B5E20]">Academic Staff Portal</h1>
+          <h1 className="text-2xl sm:text-4xl font-bold text-[#1B5E20]">Academic Team Portal</h1>
           <p className="text-gray-500 text-sm sm:text-base mt-2">Select your role to sign in</p>
         </div>
 

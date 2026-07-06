@@ -27,7 +27,7 @@ export default function Navbar() {
       ]
     : [
         { label: 'Check Result', to: '/check-result' },
-        { label: 'Academic Staff', to: '/login', className: 'bg-yellow-600 hover:bg-yellow-700 px-4 py-1.5 rounded' }
+        { label: 'Academic Team', to: '/login', className: 'bg-yellow-600 hover:bg-yellow-700 px-4 py-1.5 rounded' }
       ]
 
   return (
