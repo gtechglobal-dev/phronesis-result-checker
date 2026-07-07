@@ -1,4 +1,4 @@
-const prisma = require('../utils/prisma')
+const { ResultPin, Student } = require('../models')
 
 function generatePin() {
   let pin = ''
@@ -13,7 +13,7 @@ exports.generate = async (req, res) => {
     const { regNo, count } = req.body
     if (!regNo) return res.status(400).json({ message: 'Registration number is required' })
 
-    const student = await prisma.student.findUnique({ where: { regNo } })
+    const student = await Student.findOne({ regNo })
     if (!student) return res.status(404).json({ message: 'Student not found' })
 
     const numPins = Math.min(count || 1, 10)
@@ -24,23 +24,20 @@ exports.generate = async (req, res) => {
       const pin = generatePin()
       if (usedPins.has(pin)) continue
       usedPins.add(pin)
-      const existing = await prisma.resultPin.findUnique({ where: { pin } })
+      const existing = await ResultPin.findOne({ pin })
       if (existing) continue
       pins.push(pin)
     }
 
-    await prisma.resultPin.createMany({
-      data: pins.map(pin => ({
-        pin,
-        regNo,
-        generatedBy: req.user.id
-      }))
-    })
+    const pinDocs = pins.map(pin => ({
+      pin,
+      regNo,
+      generatedBy: req.user.id
+    }))
+    await ResultPin.insertMany(pinDocs)
 
-    const created = await prisma.resultPin.findMany({
-      where: { pin: { in: pins } },
-      orderBy: { createdAt: 'desc' }
-    })
+    const created = await ResultPin.find({ pin: { $in: pins } })
+      .sort({ createdAt: -1 })
 
     res.status(201).json({ message: `${pins.length} PIN(s) generated`, pins: created })
   } catch (error) {
@@ -50,10 +47,9 @@ exports.generate = async (req, res) => {
 
 exports.list = async (req, res) => {
   try {
-    const pins = await prisma.resultPin.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: { generator: { select: { firstName: true, lastName: true } } }
-    })
+    const pins = await ResultPin.find()
+      .sort({ createdAt: -1 })
+      .populate('generatedBy', 'firstName lastName')
     res.json(pins)
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })
@@ -63,10 +59,7 @@ exports.list = async (req, res) => {
 exports.revoke = async (req, res) => {
   try {
     const { id } = req.params
-    const pin = await prisma.resultPin.update({
-      where: { id },
-      data: { isActive: false }
-    })
+    const pin = await ResultPin.findByIdAndUpdate(id, { isActive: false }, { new: true })
     res.json({ message: 'PIN revoked', pin })
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })

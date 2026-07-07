@@ -1,31 +1,27 @@
-const prisma = require('../utils/prisma')
+const { Student, Class, Result, AcademicSession, Term } = require('../models')
 
 exports.getStudents = async (req, res) => {
   try {
     const { classId, className, arm, search } = req.query
     const where = {}
-    if (classId) where.classId = classId
+    if (classId) where.class = classId
     if (className) {
-      const classRecord = await prisma.class.findUnique({ where: { name: className } })
-      if (classRecord) where.classId = classRecord.id
+      const classRecord = await Class.findOne({ name: className })
+      if (classRecord) where.class = classRecord._id
     }
     if (arm) where.arm = arm
     if (search) {
-      where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { regNo: { contains: search, mode: 'insensitive' } }
+      where.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { regNo: { $regex: search, $options: 'i' } }
       ]
     }
 
-    const students = await prisma.student.findMany({
-      where,
-      include: {
-        class: true,
-        parent: { select: { id: true, firstName: true, lastName: true, email: true } }
-      },
-      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }]
-    })
+    const students = await Student.find(where)
+      .populate('class')
+      .populate('parent', 'firstName lastName email')
+      .sort({ lastName: 1, firstName: 1 })
     res.json(students)
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })
@@ -35,21 +31,19 @@ exports.getStudents = async (req, res) => {
 exports.getUnlinkedStudents = async (req, res) => {
   try {
     const { classId, search } = req.query
-    const where = { parentId: null }
-    if (classId) where.classId = classId
+    const where = { parent: { $exists: false } }
+    if (classId) where.class = classId
     if (search) {
-      where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { regNo: { contains: search, mode: 'insensitive' } }
+      where.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { regNo: { $regex: search, $options: 'i' } }
       ]
     }
-    const students = await prisma.student.findMany({
-      where,
-      include: { class: true },
-      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
-      take: 50
-    })
+    const students = await Student.find(where)
+      .populate('class')
+      .sort({ lastName: 1, firstName: 1 })
+      .limit(50)
     res.json(students)
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })
@@ -58,13 +52,9 @@ exports.getUnlinkedStudents = async (req, res) => {
 
 exports.getStudent = async (req, res) => {
   try {
-    const student = await prisma.student.findUnique({
-      where: { id: req.params.id },
-      include: {
-        class: { include: { subjects: true } },
-        parent: { select: { id: true, firstName: true, lastName: true, email: true } }
-      }
-    })
+    const student = await Student.findById(req.params.id)
+      .populate({ path: 'class', populate: { path: 'subjects' } })
+      .populate('parent', 'firstName lastName email')
     if (!student) return res.status(404).json({ message: 'Student not found' })
     res.json(student)
   } catch (error) {
@@ -75,13 +65,11 @@ exports.getStudent = async (req, res) => {
 exports.createStudent = async (req, res) => {
   try {
     const { regNo, firstName, lastName, classId, arm } = req.body
-    const existing = await prisma.student.findUnique({ where: { regNo } })
+    const existing = await Student.findOne({ regNo })
     if (existing) return res.status(400).json({ message: 'Registration number already exists' })
 
-    const student = await prisma.student.create({
-      data: { regNo, firstName, lastName, classId, arm },
-      include: { class: true }
-    })
+    const student = await Student.create({ regNo, firstName, lastName, class: classId, arm })
+    await student.populate('class')
     res.status(201).json(student)
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })
@@ -95,11 +83,9 @@ exports.bulkCreateStudents = async (req, res) => {
 
     let created = 0
     for (const s of students) {
-      const existing = await prisma.student.findUnique({ where: { regNo: s.regNo } })
+      const existing = await Student.findOne({ regNo: s.regNo })
       if (!existing) {
-        await prisma.student.create({
-          data: { regNo: s.regNo, firstName: s.firstName, lastName: s.lastName, classId: s.classId, arm: s.arm || 'A' }
-        })
+        await Student.create({ regNo: s.regNo, firstName: s.firstName, lastName: s.lastName, class: s.classId, arm: s.arm || 'A' })
         created++
       }
     }
@@ -112,11 +98,11 @@ exports.bulkCreateStudents = async (req, res) => {
 exports.updateStudent = async (req, res) => {
   try {
     const { firstName, lastName, classId, arm } = req.body
-    const student = await prisma.student.update({
-      where: { id: req.params.id },
-      data: { firstName, lastName, classId, arm },
-      include: { class: true }
-    })
+    const student = await Student.findByIdAndUpdate(
+      req.params.id,
+      { firstName, lastName, class: classId, arm },
+      { new: true }
+    ).populate('class')
     res.json(student)
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })
@@ -125,13 +111,13 @@ exports.updateStudent = async (req, res) => {
 
 exports.getMyChildren = async (req, res) => {
   try {
-    const students = await prisma.student.findMany({
-      where: { parentId: req.user.id },
-      include: {
-        class: true,
-        results: { include: { session: true, term: true }, orderBy: { createdAt: 'desc' } }
-      }
-    })
+    const students = await Student.find({ parent: req.user.id })
+      .populate('class')
+      .populate({
+        path: 'results',
+        populate: { path: 'session term' },
+        options: { sort: { createdAt: -1 } }
+      })
     res.json(students)
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })
@@ -140,17 +126,15 @@ exports.getMyChildren = async (req, res) => {
 
 exports.getStudentsByClass = async (req, res) => {
   try {
-    const classTeacher = await prisma.classTeacher.findFirst({
-      where: { userId: req.user.id, classId: req.params.classId }
+    const classTeacher = await require('../models/ClassTeacher').findOne({
+      user: req.user.id, class: req.params.classId
     })
     if (!classTeacher && req.user.role !== 'EXAM_OFFICER') {
       return res.status(403).json({ message: 'Not assigned to this class' })
     }
-    const students = await prisma.student.findMany({
-      where: { classId: req.params.classId },
-      include: { class: true },
-      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }]
-    })
+    const students = await Student.find({ class: req.params.classId })
+      .populate('class')
+      .sort({ lastName: 1, firstName: 1 })
     res.json(students)
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message })
@@ -162,10 +146,8 @@ exports.generateExamNumbers = async (req, res) => {
     const { classId, count } = req.body
     if (!classId || !count) return res.status(400).json({ message: 'classId and count required' })
 
-    const lastStudent = await prisma.student.findFirst({
-      where: { regNo: { startsWith: 'PHS' } },
-      orderBy: { regNo: 'desc' }
-    })
+    const lastStudent = await Student.findOne({ regNo: { $regex: '^PHS' } })
+      .sort({ regNo: -1 })
 
     let nextNum = 1
     if (lastStudent) {

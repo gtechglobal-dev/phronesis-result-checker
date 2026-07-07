@@ -1,6 +1,7 @@
 require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
+const connectDB = require('./utils/db')
 
 const authRoutes = require('./routes/auth')
 const classRoutes = require('./routes/classes')
@@ -35,6 +36,9 @@ app.use((err, req, res, next) => {
 })
 
 const PORT = process.env.PORT || 5000
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
+
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`)
+  })
 })
