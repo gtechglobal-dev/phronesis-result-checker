@@ -5,8 +5,8 @@ services:
     repo: https://github.com/gtechglobal-dev/phronesis-result-checker
     plan: free
     region: oregon
-    buildCommand: npm install && npm run build
-    startCommand: npx prisma db push && npm start
+    buildCommand: npm install
+    startCommand: npm start
     envVars:
       - key: NODE_VERSION
         value: 18
