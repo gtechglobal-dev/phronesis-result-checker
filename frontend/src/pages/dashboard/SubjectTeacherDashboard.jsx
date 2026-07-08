@@ -23,6 +23,7 @@ export default function SubjectTeacherDashboard() {
   const [selectedSessionName, setSelectedSessionName] = useState('')
   const timerRef = useRef(null)
   const pendingSaveRef = useRef(null)
+  const dirtyRef = useRef(false)
 
   const showMessage = (type, text) => {
     setMessage({ type, text })
@@ -112,9 +113,11 @@ export default function SubjectTeacherDashboard() {
         classId: selectedClassId,
         subjectId: selectedSubjectId
       })
-      console.log('loadScores response:', { students: res.data.students?.length, scores: res.data.scores, submitted: res.data.submitted })
       setStudents(res.data.students || [])
-      setScores(res.data.scores || {})
+      const loaded = res.data.scores || {}
+      setScores(loaded)
+      pendingSaveRef.current = loaded
+      dirtyRef.current = false
       setSubmitted(res.data.submitted || false)
     } catch (err) {
       console.error('loadScores error:', err?.response?.data || err.message)
@@ -133,6 +136,7 @@ export default function SubjectTeacherDashboard() {
 
     if (timerRef.current) clearTimeout(timerRef.current)
     pendingSaveRef.current = updated
+    dirtyRef.current = true
     timerRef.current = setTimeout(() => {
       const pending = pendingSaveRef.current
       if (!pending) return
@@ -152,6 +156,7 @@ export default function SubjectTeacherDashboard() {
         subjectId: selectedSubjectId,
         scores: scoresArr
       }).then(() => {
+        dirtyRef.current = false
         showMessage('success', 'Scores saved')
       }).catch((err) => {
         showMessage('error', err.response?.data?.message || 'Error saving scores')
@@ -163,6 +168,32 @@ export default function SubjectTeacherDashboard() {
     setShowConfirm(false)
     try {
       setSubmitting(true)
+
+      if (timerRef.current) clearTimeout(timerRef.current)
+      if (dirtyRef.current) {
+        const pending = pendingSaveRef.current
+        if (pending) {
+          const scoresArr = students
+            .filter(s => pending[s._id || s.id] != null)
+            .map(s => ({
+              studentId: s._id || s.id,
+              ca1: pending[s._id || s.id]?.ca1 || 0,
+              ca2: pending[s._id || s.id]?.ca2 || 0,
+              exam: pending[s._id || s.id]?.exam || 0
+            }))
+          if (scoresArr.length) {
+            await subjectTeacherAPI.saveScores({
+              sessionId: selectedSession,
+              termId: selectedTerm,
+              classId: selectedClassId,
+              subjectId: selectedSubjectId,
+              scores: scoresArr
+            })
+          }
+        }
+        dirtyRef.current = false
+      }
+
       await subjectTeacherAPI.submitScores({
         sessionId: selectedSession,
         termId: selectedTerm,

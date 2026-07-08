@@ -14,6 +14,7 @@ export default function FormTeacherDashboard() {
   const [selectedTerm, setSelectedTerm] = useState('')
   const [message, setMessage] = useState({ type: '', text: '' })
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [savingComment, setSavingComment] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('ftActiveTab') || 'broadsheet')
@@ -45,6 +46,8 @@ export default function FormTeacherDashboard() {
   const [reviewMessage, setReviewMessage] = useState({ type: '', text: '' })
   const [reopening, setReopening] = useState(null)
   const [reopenModal, setReopenModal] = useState({ show: false, subjectId: null, subjectName: '' })
+  const [commentModal, setCommentModal] = useState({ show: false, resultId: null, comment: '', studentName: '' })
+  const [editPositionId, setEditPositionId] = useState(null)
 
   useEffect(() => { sessionStorage.setItem('ftActiveTab', activeTab) }, [activeTab])
 
@@ -176,10 +179,10 @@ export default function FormTeacherDashboard() {
     setDeleteConfirm({ show: false, student: null })
   }
 
-  const loadBroadsheet = useCallback(async () => {
+  const loadBroadsheet = useCallback(async (isBackground) => {
     if (!selectedSession || !selectedTerm) return
     try {
-      setLoading(true)
+      if (isBackground) setRefreshing(true); else setLoading(true)
       const res = await formTeacherAPI.getBroadsheet({ sessionId: selectedSession, termId: selectedTerm })
       setBroadsheet(res.data)
       setDaysOpen(res.data.daysOpen != null ? String(res.data.daysOpen) : '')
@@ -194,7 +197,7 @@ export default function FormTeacherDashboard() {
       setAttendanceData(att)
     } catch (err) {
       showMessage('error', err.response?.data?.message || 'Failed to load broadsheet')
-    } finally { setLoading(false) }
+    } finally { if (isBackground) setRefreshing(false); else setLoading(false) }
   }, [selectedSession, selectedTerm])
 
   useEffect(() => {
@@ -203,7 +206,7 @@ export default function FormTeacherDashboard() {
   }, [myClass, selectedSession, selectedTerm, loadStudentList, loadBroadsheet])
 
   const refreshBroadsheet = useCallback(() => {
-    loadBroadsheet()
+    loadBroadsheet(true)
   }, [loadBroadsheet])
 
   useSocketListener('entity:updated', refreshBroadsheet)
@@ -252,6 +255,13 @@ export default function FormTeacherDashboard() {
     try {
       await formTeacherAPI.updateComment({ resultId, teacherComment: comment })
     } catch {} finally { setSavingComment(false) }
+  }
+
+  const handleSavePosition = async (resultId, position) => {
+    if (!resultId) return
+    try {
+      await formTeacherAPI.updatePosition({ resultId, position: parseInt(position) || 0 })
+    } catch {}
   }
 
   const handleSaveSettings = async () => {
@@ -331,6 +341,13 @@ export default function FormTeacherDashboard() {
     return 'Unsatisfactory. Urgent improvement needed.'
   }
 
+  const formatPosition = (pos) => {
+    if (!pos) return '-'
+    const s = ['th', 'st', 'nd', 'rd']
+    const v = pos % 100
+    return pos + (s[(v - 20) % 10] || s[v] || s[0])
+  }
+
   const printBroadsheet = () => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
@@ -366,7 +383,7 @@ export default function FormTeacherDashboard() {
         <thead><tr>
           <th rowspan="2">S/N</th><th rowspan="2">Student Name</th><th rowspan="2">G</th>
           ${subjects.map(s => `<th colspan="4">${s.name}</th>`).join('')}
-          <th rowspan="2">Total</th><th rowspan="2">Average</th><th rowspan="2">Pos</th><th rowspan="2">Comment</th>
+          <th rowspan="2">GRAND TOTAL</th><th rowspan="2">Average</th><th rowspan="2">Pos</th><th rowspan="2">Comment</th>
         </tr><tr>
           ${subjects.map(() => '<th>CA1(20)</th><th>CA2(20)</th><th>EXAM(60)</th><th>Total(100)</th>').join('')}
         </tr></thead>
@@ -382,7 +399,7 @@ export default function FormTeacherDashboard() {
             }).join('')}
             <td class="total">${row.totalScore}</td>
             <td>${row.average}</td>
-            <td>${row.position || '-'}</td>
+            <td>${formatPosition(row.position)}</td>
             <td style="font-size:7px;text-align:left">${row.teacherComment || generateComment(row.totalScore, row.subjectCount)}</td>
           </tr>`).join('')}
         </tbody>
@@ -418,7 +435,7 @@ export default function FormTeacherDashboard() {
         pdf.rect(x, y - 5, colW * 4, rowH * 2)
         x += colW * 4
       })
-      const lastCols = ['TOTAL', 'AVERAGE', 'POS']
+      const lastCols = ['GRAND TOTAL', 'AVERAGE', 'POS']
       lastCols.forEach(h => {
         pdf.text(h, x + colW / 2, y + 3, { align: 'center' })
         pdf.rect(x, y - 5, colW, rowH * 2)
@@ -468,7 +485,7 @@ export default function FormTeacherDashboard() {
           x += colW
         })
       })
-      ;[row.totalScore, row.average, row.position || '-'].forEach(v => {
+      ;[row.totalScore, row.average, formatPosition(row.position)].forEach(v => {
         pdf.text(String(v), x + colW / 2, y, { align: 'center' })
         pdf.rect(x, y - 5, colW, rowH)
         x += colW
@@ -488,7 +505,7 @@ export default function FormTeacherDashboard() {
     broadsheet.subjects.forEach(s => {
       headers.push(`${s.name}-CA1`, `${s.name}-CA2`, `${s.name}-EXAM`, `${s.name}-TOTAL`)
     })
-    headers.push('TOTAL', 'AVERAGE', 'POSITION')
+    headers.push('GRAND TOTAL', 'AVERAGE', 'POSITION')
     const data = broadsheet.students.map((row, i) => {
       const rowData = [i + 1, `${row.student.lastName} ${row.student.firstName}`, row.student.gender || '-']
       broadsheet.subjects.forEach(s => {
@@ -499,7 +516,7 @@ export default function FormTeacherDashboard() {
           rowData.push('-', '-', '-', '-')
         }
       })
-      rowData.push(row.totalScore, row.average, row.position || '-')
+      rowData.push(row.totalScore, row.average, formatPosition(row.position))
       return rowData
     })
     const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
@@ -574,8 +591,9 @@ export default function FormTeacherDashboard() {
         <div className="bg-white rounded-xl shadow-md p-5 sm:p-6" ref={broadsheetRef}>
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-bold text-lg text-[#1B5E20]">Result Broadsheet</h3>
-            <div className="flex gap-2">
-              <button onClick={loadBroadsheet} className="text-xs text-[#1B5E20] hover:text-yellow-600 font-medium transition">Refresh</button>
+            <div className="flex gap-2 items-center">
+              <button onClick={() => loadBroadsheet()} className="text-xs text-[#1B5E20] hover:text-yellow-600 font-medium transition">Refresh</button>
+              {refreshing && <div className="w-3 h-3 border-2 border-[#1B5E20] border-t-transparent rounded-full animate-spin" />}
               <button onClick={downloadBroadsheetXLSX}
                 className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 transition">XLSX</button>
               <button onClick={downloadBroadsheetPDF}
@@ -596,7 +614,7 @@ export default function FormTeacherDashboard() {
                     {broadsheet.subjects.map(s => (
                       <th key={s._id || s.id} className="p-1 text-center font-semibold text-xs border-r border-green-800 bg-[#1B5E20]" colSpan="4">{s.name}</th>
                     ))}
-                    <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">TOTAL</th>
+                    <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">GRAND TOTAL</th>
                     <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">AVERAGE</th>
                     <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">POSITION</th>
                     <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">Comment</th>
@@ -638,13 +656,30 @@ export default function FormTeacherDashboard() {
                       })}
                       <td className="p-2 text-center font-bold">{row.totalScore}</td>
                       <td className="p-2 text-center">{row.average}</td>
-                      <td className="p-2 text-center font-bold">{row.position || '-'}</td>
+                      <td className="p-2 text-center font-bold">
+                        {row.resultId ? (
+                          editPositionId === row.resultId ? (
+                            <input type="number" min="0" defaultValue={row.position || ''} autoFocus
+                              onBlur={(e) => { setEditPositionId(null); handleSavePosition(row.resultId, e.target.value) }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditPositionId(null) }}
+                              className="w-14 px-1 py-0.5 border border-[#1B5E20] rounded text-xs text-center font-bold outline-none" />
+                          ) : (
+                            <button onClick={() => setEditPositionId(row.resultId)}
+                              className="cursor-pointer hover:text-[#1B5E20] transition">
+                              {formatPosition(row.position)}
+                            </button>
+                          )
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
                       <td className="p-2 text-left text-xs max-w-[150px]">
                         {row.resultId ? (
-                          <input type="text" defaultValue={row.teacherComment || generateComment(row.totalScore, row.subjectCount)}
-                            onBlur={(e) => handleSaveComment(row.resultId, e.target.value)}
-                            className="w-full px-1 py-0.5 border border-gray-200 rounded text-xs bg-transparent focus:bg-white focus:border-[#1B5E20] outline-none"
-                            placeholder="Add comment..." />
+                          <button onClick={() => setCommentModal({ show: true, resultId: row.resultId, comment: row.teacherComment || generateComment(row.totalScore, row.subjectCount), studentName: `${row.student.lastName} ${row.student.firstName}` })}
+                            className="w-full text-left px-1 py-0.5 rounded text-xs bg-transparent hover:bg-gray-100 transition cursor-pointer truncate"
+                            title="Click to edit comment">
+                            {row.teacherComment || generateComment(row.totalScore, row.subjectCount)}
+                          </button>
                         ) : (
                           <span className="text-gray-400 text-xs">No result</span>
                         )}
@@ -830,6 +865,38 @@ export default function FormTeacherDashboard() {
                   Reopen
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {commentModal.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setCommentModal({ show: false, resultId: null, comment: '', studentName: '' })}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-800">Teacher's Comment</h3>
+              <button onClick={() => setCommentModal({ show: false, resultId: null, comment: '', studentName: '' })}
+                className="text-gray-400 hover:text-gray-600 transition cursor-pointer text-xl leading-none">&times;</button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Student: <strong>{commentModal.studentName}</strong>
+            </p>
+            <textarea value={commentModal.comment}
+              onChange={(e) => setCommentModal(prev => ({ ...prev, comment: e.target.value }))}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm min-h-[120px] resize-y focus:border-[#1B5E20] outline-none"
+              placeholder="Enter teacher comment..." />
+            <div className="flex gap-3 justify-end mt-4">
+              <button onClick={() => setCommentModal({ show: false, resultId: null, comment: '', studentName: '' })}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={async () => {
+                await handleSaveComment(commentModal.resultId, commentModal.comment)
+                setCommentModal({ show: false, resultId: null, comment: '', studentName: '' })
+              }}
+                className="px-4 py-2 bg-[#1B5E20] text-white rounded-lg text-sm font-semibold hover:bg-[#2E7D32] transition cursor-pointer">
+                Save
+              </button>
             </div>
           </div>
         </div>

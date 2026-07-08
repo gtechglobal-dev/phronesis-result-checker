@@ -38,10 +38,13 @@ export const useSocket = () => useContext(SocketContext)
 
 export function useSocketListener(event, handler) {
   const { socket } = useSocket()
+  const handlerRef = useRef(handler)
+  handlerRef.current = handler
 
   useEffect(() => {
     if (!socket) return
-    socket.on(event, handler)
-    return () => socket.off(event, handler)
-  }, [socket, event, handler])
+    const listener = (...args) => handlerRef.current(...args)
+    socket.on(event, listener)
+    return () => socket.off(event, listener)
+  }, [socket, event])
 }

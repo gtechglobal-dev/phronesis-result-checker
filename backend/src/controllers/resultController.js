@@ -138,7 +138,8 @@ exports.updatePositions = async (req, res) => {
       .sort({ totalScore: -1 })
 
     for (let i = 0; i < results.length; i++) {
-      await Result.findByIdAndUpdate(results[i]._id, { position: i + 1 })
+      const pos = i === 0 ? 1 : results[i].totalScore === results[i - 1].totalScore ? results[i - 1].position : i + 1
+      await Result.findByIdAndUpdate(results[i]._id, { position: pos })
     }
     res.json({ message: 'Positions updated successfully' })
     try { emitToRole('EXAM_OFFICER', 'result:positions', { classId, sessionId, termId }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}

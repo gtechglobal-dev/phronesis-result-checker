@@ -29,6 +29,7 @@ ResultSchema.index({ class: 1 })
 ResultSchema.index({ session: 1 })
 ResultSchema.index({ term: 1 })
 ResultSchema.index({ status: 1 })
+ResultSchema.index({ student: 1, session: 1, term: 1 }, { unique: true })
 ResultSchema.index({ class: 1, session: 1, term: 1 })
 
 module.exports = mongoose.model('Result', ResultSchema)

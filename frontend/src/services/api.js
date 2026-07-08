@@ -112,6 +112,7 @@ export const subjectTeacherAPI = {
 export const formTeacherAPI = {
   getBroadsheet: (params) => api.get("/form-teacher/broadsheet", { params }),
   updateComment: (data) => api.put("/form-teacher/comment", data),
+  updatePosition: (data) => api.put("/form-teacher/position", data),
   updateSettings: (data) => api.post("/form-teacher/settings", data),
   updateAttendance: (data) => api.post("/form-teacher/attendance", data),
   submitBroadsheet: (data) => api.post("/form-teacher/submit", data),

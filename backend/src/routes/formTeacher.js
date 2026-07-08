@@ -5,10 +5,12 @@ const protect = require('../middlewares/auth')
 const authorize = require('../middlewares/roleAuth')
 
 router.get('/broadsheet', protect, authorize('FORM_TEACHER'), ctrl.getBroadsheet)
+router.put('/position', protect, authorize('FORM_TEACHER'), ctrl.updatePosition)
 router.put('/comment', protect, authorize('FORM_TEACHER'), ctrl.updateComment)
 router.post('/settings', protect, authorize('FORM_TEACHER'), ctrl.updateSettings)
 router.post('/attendance', protect, authorize('FORM_TEACHER'), ctrl.updateAttendance)
 router.post('/reopen-subject', protect, authorize('FORM_TEACHER'), ctrl.reopenSubject)
 router.post('/submit', protect, authorize('FORM_TEACHER'), ctrl.submitBroadsheet)
+router.post('/deduplicate-results', protect, authorize('FORM_TEACHER', 'EXAM_OFFICER'), ctrl.deduplicateResults)
 
 module.exports = router
