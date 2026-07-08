@@ -1,4 +1,5 @@
 const { SubjectAssignment, User, Subject, Class } = require('../models')
+const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 
 exports.create = async (req, res) => {
   try {
@@ -13,8 +14,9 @@ exports.create = async (req, res) => {
       { path: 'class' }
     ])
     res.status(201).json(assignment)
+    try { emitToRole('EXAM_OFFICER', 'subjectAssignment:created', { assignment }); emitBroadcast('entity:updated', { type: 'subjectAssignment' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -32,7 +34,7 @@ exports.list = async (req, res) => {
       .sort([['class.name', 1], ['subject.name', 1]])
     res.json(assignments)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -43,7 +45,7 @@ exports.getMyAssignment = async (req, res) => {
       .populate('class')
     res.json(assignments)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -51,7 +53,8 @@ exports.remove = async (req, res) => {
   try {
     await SubjectAssignment.findByIdAndDelete(req.params.id)
     res.json({ message: 'Assignment removed' })
+    try { emitToRole('EXAM_OFFICER', 'subjectAssignment:removed', { assignmentId: req.params.id }); emitBroadcast('entity:updated', { type: 'subjectAssignment' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }

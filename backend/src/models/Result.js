@@ -16,7 +16,13 @@ const ResultSchema = new mongoose.Schema({
   principalComment: { type: String },
   daysPresent: { type: Number },
   daysAbsent: { type: Number },
-}, { timestamps: true })
+}, { timestamps: true, toJSON: { virtuals: true } })
+
+ResultSchema.virtual('details', {
+  ref: 'ResultDetail',
+  localField: '_id',
+  foreignField: 'result',
+})
 
 ResultSchema.index({ student: 1 })
 ResultSchema.index({ class: 1 })

@@ -1,4 +1,5 @@
-const { ResultPin, Student } = require('../models')
+const { ResultPin } = require('../models')
+const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 
 function generatePin() {
   let pin = ''
@@ -10,13 +11,9 @@ function generatePin() {
 
 exports.generate = async (req, res) => {
   try {
-    const { regNo, count } = req.body
-    if (!regNo) return res.status(400).json({ message: 'Registration number is required' })
+    const { count } = req.body
 
-    const student = await Student.findOne({ regNo })
-    if (!student) return res.status(404).json({ message: 'Student not found' })
-
-    const numPins = Math.min(count || 1, 10)
+    const numPins = Math.min(count || 1, 50)
     const pins = []
     const usedPins = new Set()
 
@@ -31,7 +28,6 @@ exports.generate = async (req, res) => {
 
     const pinDocs = pins.map(pin => ({
       pin,
-      regNo,
       generatedBy: req.user.id
     }))
     await ResultPin.insertMany(pinDocs)
@@ -40,8 +36,9 @@ exports.generate = async (req, res) => {
       .sort({ createdAt: -1 })
 
     res.status(201).json({ message: `${pins.length} PIN(s) generated`, pins: created })
+    try { emitToRole('EXAM_OFFICER', 'pin:generated', { count: pins.length }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -52,16 +49,18 @@ exports.list = async (req, res) => {
       .populate('generatedBy', 'firstName lastName')
     res.json(pins)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
-exports.revoke = async (req, res) => {
+exports.deletePin = async (req, res) => {
   try {
     const { id } = req.params
-    const pin = await ResultPin.findByIdAndUpdate(id, { isActive: false }, { new: true })
-    res.json({ message: 'PIN revoked', pin })
+    const pin = await ResultPin.findByIdAndDelete(id)
+    if (!pin) return res.status(404).json({ message: 'PIN not found' })
+    res.json({ message: 'PIN deleted' })
+    try { emitToRole('EXAM_OFFICER', 'pin:deleted', { pinId: id }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }

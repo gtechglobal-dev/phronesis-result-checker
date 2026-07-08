@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { resultAPI, classAPI } from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
+import { useSocketListener } from '../../context/SocketContext'
 
 function ResultView({ result, onClose }) {
   if (result.withheld || result._message) {
@@ -97,6 +98,15 @@ export default function ParentDashboard() {
     loadChildren()
     classAPI.getSessions().then(res => setSessions(res.data)).catch(() => {})
   }, [])
+
+  const refreshData = useCallback(() => {
+    loadChildren();
+    classAPI.getSessions().then(setSessions)
+  }, [])
+
+  useSocketListener('entity:updated', refreshData)
+  useSocketListener('result:status', refreshData)
+  useSocketListener('result:withheld', refreshData)
 
   const loadChildren = async () => {
     try {

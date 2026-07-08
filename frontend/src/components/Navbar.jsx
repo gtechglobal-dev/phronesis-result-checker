@@ -16,9 +16,11 @@ export default function Navbar() {
     ? '/dashboard/exam-officer'
     : user?.role === 'FORM_TEACHER'
     ? '/dashboard/form-teacher'
+    : user?.role === 'SUBJECT_TEACHER'
+    ? '/dashboard/subject-teacher'
     : '/dashboard/parent'
 
-  const roleLabel = user?.role === 'FORM_TEACHER' ? 'SUBJECT TEACHER' : user?.role.replace('_', ' ')
+  const roleLabel = user?.role.replace('_', ' ')
 
   const navLinks = user
     ? [

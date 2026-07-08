@@ -62,14 +62,14 @@ export default function ResultChecker() {
       <div className="bg-white rounded-2xl shadow-xl p-5 sm:p-8">
         <form onSubmit={handleSearch} className="space-y-3 sm:space-y-4">
           <div>
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Reg. No.</label>
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Examination Number</label>
             <input
               type="text"
               required
               value={regNo}
               onChange={(e) => setRegNo(e.target.value.toUpperCase())}
               className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] focus:border-transparent outline-none text-sm"
-              placeholder="e.g., PHS/2025/001"
+              placeholder="e.g., PHS/00001"
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">

@@ -1,6 +1,9 @@
-import { useState, useEffect, useRef, Fragment } from 'react'
+import { useState, useEffect, useRef, Fragment, useCallback } from 'react'
+import { jsPDF } from 'jspdf'
+import * as XLSX from 'xlsx'
 import { classAPI, studentAPI, formTeacherAPI } from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
+import { useSocketListener } from '../../context/SocketContext'
 
 export default function FormTeacherDashboard() {
   const { user } = useAuth()
@@ -13,18 +16,34 @@ export default function FormTeacherDashboard() {
   const [loading, setLoading] = useState(true)
   const [savingComment, setSavingComment] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [activeTab, setActiveTab] = useState('broadsheet')
+  const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('ftActiveTab') || 'broadsheet')
   const broadsheetRef = useRef(null)
 
-  const [studentForm, setStudentForm] = useState({ regNo: '', firstName: '', lastName: '', arm: 'A' })
+  const [studentForm, setStudentForm] = useState({ names: '' })
   const [studentLoading, setStudentLoading] = useState(false)
-  const [examNumbers, setExamNumbers] = useState([])
+  const [studentList, setStudentList] = useState([])
+  const [editStudentId, setEditStudentId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState({ show: false, student: null })
+  const loadStudentList = useCallback(async () => {
+    if (!myClass) return
+    try {
+      const classId = myClass.id || myClass._id
+      if (!classId) return
+      const res = await studentAPI.getAll({ classId })
+      setStudentList(Array.isArray(res.data) ? res.data : [])
+    } catch (err) {
+      console.error('loadStudentList error:', err?.response?.data || err.message)
+    }
+  }, [myClass])
 
   const [daysOpen, setDaysOpen] = useState('')
   const [nextResDate, setNextResDate] = useState('')
   const [attendanceData, setAttendanceData] = useState({})
   const [savingAttendance, setSavingAttendance] = useState(false)
   const [savingSettings, setSavingSettings] = useState(false)
+
+  useEffect(() => { sessionStorage.setItem('ftActiveTab', activeTab) }, [activeTab])
 
   const tabs = [
     { id: 'broadsheet', label: 'Broadsheet' },
@@ -49,9 +68,10 @@ export default function FormTeacherDashboard() {
         setSessions(sessRes.data)
         if (sessRes.data.length) {
           const curr = sessRes.data.find(s => s.isCurrent) || sessRes.data[0]
-          setSelectedSession(curr.id)
+          setSelectedSession(curr._id || curr.id)
           if (curr.terms?.length) {
-            setSelectedTerm(curr.terms.find(t => t.isCurrent)?.id || curr.terms[0].id)
+            const currentTerm = curr.terms.find(t => t.isCurrent)
+            setSelectedTerm((currentTerm && (currentTerm._id || currentTerm.id)) || (curr.terms[0]._id || curr.terms[0].id))
           }
         }
       } catch { showMessage('error', 'Failed to load data') }
@@ -60,11 +80,113 @@ export default function FormTeacherDashboard() {
     init()
   }, [])
 
+  const handleGenderToggle = async (student) => {
+    const next = student.gender === 'M' ? 'F' : 'M'
+    try {
+      await studentAPI.update(student._id || student.id, { gender: next })
+      setStudentList(prev => prev.map(s =>
+        (s._id || s.id) === (student._id || student.id) ? { ...s, gender: next } : s
+      ))
+    } catch { showMessage('error', 'Failed to update gender') }
+  }
+
+  const handleDownloadXLSX = () => {
+    if (!studentList.length) return
+    const data = studentList.map((s, i) => ({
+      'S/N': i + 1,
+      'NAMES': `${s.lastName} ${s.firstName}`,
+      'GENDER': s.gender || '',
+      'EXAM NUMBER': s.regNo
+    }))
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Students')
+    XLSX.writeFile(wb, `${myClass?.name || 'class'}_students.xlsx`)
+  }
+
+  const handleDownloadPDF = () => {
+    if (!studentList.length) return
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm' })
+    const pageW = pdf.internal.pageSize.getWidth()
+    const margin = 10
+    const colW = [(pageW - margin * 2) * 0.08, (pageW - margin * 2) * 0.4, (pageW - margin * 2) * 0.17, (pageW - margin * 2) * 0.35]
+    const rowH = 8
+    const header = ['S/N', 'NAMES', 'GENDER', 'EXAM NUMBER']
+    let y = margin + 10
+    pdf.setFontSize(10)
+    pdf.setFont('helvetica', 'bold')
+    header.forEach((h, i) => {
+      const x = margin + colW.slice(0, i).reduce((a, b) => a + b, 0)
+      pdf.text(h, x + (i === 1 ? 2 : (colW[i] / 2)), y, { align: i === 1 ? 'left' : 'center' })
+    })
+    y += rowH
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(9)
+    studentList.forEach((s, i) => {
+      const cols = [String(i + 1), `${s.lastName} ${s.firstName}`, s.gender || '-', s.regNo]
+      if (y + rowH > pdf.internal.pageSize.getHeight() - margin) {
+        pdf.addPage()
+        y = margin + 10
+      }
+      cols.forEach((text, ci) => {
+        const x = margin + colW.slice(0, ci).reduce((a, b) => a + b, 0)
+        pdf.text(text, x + (ci === 1 ? 2 : (colW[ci] / 2)), y, { align: ci === 1 ? 'left' : 'center' })
+      })
+      y += rowH
+    })
+    pdf.save(`${myClass?.name || 'class'}_students.pdf`)
+  }
+
+  const handleStartEdit = (student) => {
+    setEditStudentId(student._id || student.id)
+    setEditName(`${student.lastName} ${student.firstName}`)
+  }
+
+  const handleSaveName = async (student) => {
+    const parts = editName.trim().split(/\s+/)
+    if (parts.length === 0) { setEditStudentId(null); return }
+    const lastName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0]
+    const firstName = parts.length > 1 ? parts[parts.length - 1] : parts[0]
+    try {
+      await studentAPI.update(student._id || student.id, { firstName, lastName })
+      setStudentList(prev => prev.map(s =>
+        (s._id || s.id) === (student._id || student.id) ? { ...s, firstName: firstName.toUpperCase(), lastName: lastName.toUpperCase() } : s
+      ))
+    } catch { showMessage('error', 'Failed to update name') }
+    setEditStudentId(null)
+  }
+
+  const handleEditKeyDown = (e, student) => {
+    if (e.key === 'Enter') { e.preventDefault(); handleSaveName(student) }
+    if (e.key === 'Escape') setEditStudentId(null)
+  }
+
+  const handleDeleteStudent = async () => {
+    const student = deleteConfirm.student
+    if (!student) return
+    try {
+      await studentAPI.remove(student._id || student.id)
+      setStudentList(prev => prev.filter(s => (s._id || s.id) !== (student._id || student.id)))
+      showMessage('success', 'Student removed')
+    } catch { showMessage('error', 'Failed to delete student') }
+    setDeleteConfirm({ show: false, student: null })
+  }
+
   useEffect(() => {
+    loadStudentList()
     if (myClass && selectedSession && selectedTerm) loadBroadsheet()
-  }, [myClass, selectedSession, selectedTerm])
+  }, [myClass, selectedSession, selectedTerm, loadStudentList])
+
+  const refreshBroadsheet = useCallback(() => {
+    if (selectedSession && selectedTerm) loadBroadsheet()
+  }, [selectedSession, selectedTerm])
+
+  useSocketListener('entity:updated', refreshBroadsheet)
+  useSocketListener('result:status', refreshBroadsheet)
+  useSocketListener('result:withheld', refreshBroadsheet)
 
   const loadBroadsheet = async () => {
+    if (!selectedSession || !selectedTerm) return
     try {
       setLoading(true)
       const res = await formTeacherAPI.getBroadsheet({ sessionId: selectedSession, termId: selectedTerm })
@@ -88,35 +210,33 @@ export default function FormTeacherDashboard() {
     try { const res = await classAPI.getSessions(); setSessions(res.data) } catch {}
   }
 
-  const generateExamNumbers = async () => {
-    if (!myClass) return
-    const count = parseInt(prompt('How many exam numbers to generate?', '10'))
-    if (!count || count < 1) return
-    try {
-      const res = await studentAPI.generateExamNumbers({ classId: myClass.id, count })
-      setExamNumbers(res.data.numbers || [])
-      showMessage('success', `${res.data.numbers.length} exam numbers generated`)
-    } catch (err) {
-      showMessage('error', err.response?.data?.message || 'Error generating numbers')
-    }
-  }
-
-  const useExamNumber = (num) => {
-    setStudentForm(prev => ({ ...prev, regNo: num }))
-    setExamNumbers(prev => prev.filter(n => n !== num))
-  }
-
   const handleCreateStudent = async (e) => {
     e.preventDefault()
     if (!myClass) return
+
+    const names = studentForm.names.split(',').map(s => s.trim()).filter(Boolean)
+    if (!names.length) {
+      showMessage('error', 'Enter at least one student name')
+      return
+    }
+
+    const students = names.map(name => {
+      const parts = name.trim().split(/\s+/)
+      const lastName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0]
+      const firstName = parts.length > 1 ? parts[parts.length - 1] : parts[0]
+      return { firstName, lastName, classId: myClass.id || myClass._id }
+    })
+
     setStudentLoading(true)
     try {
-      await studentAPI.create({ ...studentForm, classId: myClass.id })
-      showMessage('success', 'Student created')
-      setStudentForm({ regNo: '', firstName: '', lastName: '', arm: 'A' })
-      loadBroadsheet()
+      await studentAPI.bulkCreate({ students })
+      showMessage('success', `${students.length} student(s) created`)
+      setStudentForm({ names: '' })
+      await loadStudentList()
     } catch (err) {
-      showMessage('error', err.response?.data?.message || 'Error creating student')
+      const msg = err.response?.data?.message || err.message || 'Error creating students'
+      showMessage('error', msg)
+      console.error('create students error:', err?.response?.data || err.message)
     } finally { setStudentLoading(false) }
   }
 
@@ -195,6 +315,8 @@ export default function FormTeacherDashboard() {
     if (!printWindow) return
     const rows = broadsheet?.students || []
     const subjects = broadsheet?.subjects || []
+    const sessionName = sessions.find(s => (s._id || s.id) === selectedSession)?.name || ''
+    const termName = sessions.filter(s => (s._id || s.id) === selectedSession).flatMap(s => s.terms || []).find(t => (t._id || t.id) === selectedTerm)?.name || ''
 
     printWindow.document.write(`<!DOCTYPE html><html><head>
       <title>Broadsheet - ${broadsheet?.class?.name || ''}</title>
@@ -216,24 +338,22 @@ export default function FormTeacherDashboard() {
       <div class="header">
         <img src="/school logo.png" alt="Logo" />
         <h1>Phronesis Int'l School</h1>
-        <h2>${broadsheet?.class?.name || ''} - ${sessions.find(s => s.id === selectedSession)?.name || ''} (${sessions.filter(s => s.id === selectedSession).flatMap(s => s.terms || []).find(t => t.id === selectedTerm)?.name || ''})</h2>
+        <h2>${broadsheet?.class?.name || ''} - ${sessionName} (${termName})</h2>
         <h2>RESULT BROADSHEET</h2>
       </div>
       <table>
         <thead><tr>
-          <th>S/N</th><th>Reg No</th><th>Student Name</th>
+          <th rowspan="2">S/N</th><th rowspan="2">Student Name</th><th rowspan="2">G</th>
           ${subjects.map(s => `<th colspan="4">${s.name}</th>`).join('')}
-          <th>Total</th><th>Avg</th><th>Pos</th><th>Comment</th>
+          <th rowspan="2">Total</th><th rowspan="2">Average</th><th rowspan="2">Pos</th><th rowspan="2">Comment</th>
         </tr><tr>
-          <th colspan="3"></th>
-          ${subjects.map(() => '<th>CA1</th><th>CA2</th><th>Exam</th><th>Tot</th>').join('')}
-          <th colspan="4"></th>
+          ${subjects.map(() => '<th>CA1(20)</th><th>CA2(20)</th><th>EXAM(60)</th><th>Total(100)</th>').join('')}
         </tr></thead>
         <tbody>
           ${rows.map((row, i) => `<tr>
             <td>${i + 1}</td>
-            <td>${row.student.regNo}</td>
             <td class="name">${row.student.lastName} ${row.student.firstName}</td>
+            <td>${row.student.gender || '-'}</td>
             ${subjects.map(s => {
               const d = row.details[s.id]
               return d ? `<td>${d.ca1}</td><td>${d.ca2}</td><td>${d.exam}</td><td class="total">${d.total}</td>`
@@ -250,6 +370,128 @@ export default function FormTeacherDashboard() {
     </body></html>`)
     printWindow.document.close()
     setTimeout(() => printWindow.print(), 500)
+  }
+
+  const downloadBroadsheetPDF = () => {
+    if (!broadsheet) return
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm' })
+    const pageW = pdf.internal.pageSize.getWidth()
+    const pageH = pdf.internal.pageSize.getHeight()
+    const margin = 8
+    const colW = (pageW - margin * 2) / (3 + broadsheet.subjects.length * 4 + 3)
+    const rowH = 7
+    let y = margin + 12
+
+    const drawHeader = () => {
+      pdf.setFontSize(7)
+      pdf.setFont('helvetica', 'bold')
+      let x = margin
+      const cells = ['S/N', 'NAMES', 'G']
+      cells.forEach((h, i) => {
+        pdf.text(h, x + (i < 2 ? 2 : colW / 2), y + 3, { align: i < 2 ? 'left' : 'center' })
+        x += colW
+      })
+      broadsheet.subjects.forEach(s => {
+        const sx = x
+        pdf.text(s.name, x + colW * 2, y + 3, { align: 'center' })
+        pdf.rect(x, y - 5, colW * 4, rowH * 2)
+        x += colW * 4
+      })
+      const lastCols = ['TOTAL', 'AVERAGE', 'POS']
+      lastCols.forEach(h => {
+        pdf.text(h, x + colW / 2, y + 3, { align: 'center' })
+        pdf.rect(x, y - 5, colW, rowH * 2)
+        x += colW
+      })
+    }
+
+    const drawSubHeader = () => {
+      let x = margin + colW * 3
+      pdf.setFontSize(6)
+      broadsheet.subjects.forEach(() => {
+        ;['CA1(20)', 'CA2(20)', 'EXAM(60)', 'Total(100)'].forEach((h, i) => {
+          pdf.text(h, x + colW / 2, y + 3, { align: 'center' })
+          pdf.rect(x, y - 5, colW, rowH)
+          x += colW
+        })
+      })
+    }
+
+    const drawRow = (row, i) => {
+      if (y + rowH > pageH - margin) {
+        pdf.addPage()
+        y = margin + 12
+        drawHeader()
+        y += rowH
+        drawSubHeader()
+      }
+      y += rowH
+      let x = margin
+      pdf.setFontSize(6)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(String(i + 1), x + colW / 2, y, { align: 'center' })
+      pdf.rect(x, y - 5, colW, rowH)
+      x += colW
+      pdf.text(`${row.student.lastName} ${row.student.firstName}`, x + 2, y, { align: 'left' })
+      pdf.rect(x, y - 5, colW, rowH)
+      x += colW
+      pdf.text(row.student.gender || '-', x + colW / 2, y, { align: 'center' })
+      pdf.rect(x, y - 5, colW, rowH)
+      x += colW
+      broadsheet.subjects.forEach(s => {
+        const d = row.details[s.id]
+        const vals = d ? [d.ca1, d.ca2, d.exam, d.total] : ['-', '-', '-', '-']
+        vals.forEach(v => {
+          pdf.text(String(v), x + colW / 2, y, { align: 'center' })
+          pdf.rect(x, y - 5, colW, rowH)
+          x += colW
+        })
+      })
+      ;[row.totalScore, row.average, row.position || '-'].forEach(v => {
+        pdf.text(String(v), x + colW / 2, y, { align: 'center' })
+        pdf.rect(x, y - 5, colW, rowH)
+        x += colW
+      })
+    }
+
+    drawHeader()
+    y += rowH
+    drawSubHeader()
+    broadsheet.students.forEach((row, i) => drawRow(row, i))
+    pdf.save(`${broadsheet.class.name}_broadsheet.pdf`)
+  }
+
+  const downloadBroadsheetXLSX = () => {
+    if (!broadsheet) return
+    const headers = ['S/N', 'STUDENT NAMES', 'G']
+    broadsheet.subjects.forEach(s => {
+      headers.push(`${s.name}-CA1`, `${s.name}-CA2`, `${s.name}-EXAM`, `${s.name}-TOTAL`)
+    })
+    headers.push('TOTAL', 'AVERAGE', 'POSITION')
+    const data = broadsheet.students.map((row, i) => {
+      const rowData = [i + 1, `${row.student.lastName} ${row.student.firstName}`, row.student.gender || '-']
+      broadsheet.subjects.forEach(s => {
+        const d = row.details[s.id]
+        if (d) {
+          rowData.push(d.ca1, d.ca2, d.exam, d.total)
+        } else {
+          rowData.push('-', '-', '-', '-')
+        }
+      })
+      rowData.push(row.totalScore, row.average, row.position || '-')
+      return rowData
+    })
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
+    const colW = []
+    colW.push({ wch: 4 })
+    colW.push({ wch: 25 })
+    colW.push({ wch: 3 })
+    broadsheet.subjects.forEach(() => { colW.push({ wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }) })
+    colW.push({ wch: 8 }, { wch: 8 }, { wch: 8 })
+    ws['!cols'] = colW
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Broadsheet')
+    XLSX.writeFile(wb, `${broadsheet.class.name}_broadsheet.xlsx`)
   }
 
   if (loading && !broadsheet) {
@@ -284,15 +526,15 @@ export default function FormTeacherDashboard() {
           <label className="block text-sm font-medium text-gray-700 mb-1">Session</label>
           <select value={selectedSession} onChange={(e) => setSelectedSession(e.target.value)}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm">
-            {sessions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {sessions.map(s => <option key={s._id || s.id} value={s.id || s._id}>{s.name}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Term</label>
           <select value={selectedTerm} onChange={(e) => setSelectedTerm(e.target.value)}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm">
-            {sessions.filter(s => s.id === selectedSession).flatMap(s => s.terms || []).map(t => (
-              <option key={t.id} value={t.id}>{t.name}</option>
+            {sessions.filter(s => (s._id || s.id) === selectedSession).flatMap(s => s.terms || []).map(t => (
+              <option key={t._id || t.id} value={t.id || t._id}>{t.name}</option>
             ))}
           </select>
         </div>
@@ -304,6 +546,10 @@ export default function FormTeacherDashboard() {
             <h3 className="font-bold text-lg text-[#1B5E20]">Result Broadsheet</h3>
             <div className="flex gap-2">
               <button onClick={loadBroadsheet} className="text-xs text-[#1B5E20] hover:text-yellow-600 font-medium transition">Refresh</button>
+              <button onClick={downloadBroadsheetXLSX}
+                className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 transition">XLSX</button>
+              <button onClick={downloadBroadsheetPDF}
+                className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-700 transition">PDF</button>
               <button onClick={printBroadsheet}
                 className="bg-[#1B5E20] text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-[#2E7D32] transition">Print</button>
             </div>
@@ -315,35 +561,33 @@ export default function FormTeacherDashboard() {
                 <thead>
                   <tr className="bg-[#1B5E20] text-white">
                     <th className="p-2 text-center font-medium text-[10px] sticky left-0 bg-[#1B5E20] z-10" rowSpan="2">S/N</th>
-                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">Reg No</th>
-                    <th className="p-2 text-left font-medium text-[10px] sticky left-[40px] bg-[#1B5E20] z-10" rowSpan="2">Student Name</th>
+                    <th className="p-2 text-left font-medium text-[10px] sticky left-[40px] bg-[#1B5E20] z-10" rowSpan="2">STUDENT'S NAMES</th>
+                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">G</th>
                     {broadsheet.subjects.map(s => (
-                      <th key={s.id} className="p-1 text-center font-medium text-[10px]" colSpan="4">{s.name}</th>
+                      <th key={s.id} className="p-1 text-center font-medium text-[10px] border-r border-green-800" colSpan="4">{s.name}</th>
                     ))}
-                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">Total</th>
-                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">Avg</th>
-                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">Pos</th>
+                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">TOTAL</th>
+                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">AVERAGE</th>
+                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">POSITION</th>
                     <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">Comment</th>
                   </tr>
-                  <tr className="bg-[#2E7D32] text-white">
-                    <th className="p-1" colSpan="3"></th>
+                  <tr className="bg-[#E8F5E9] text-gray-700 border-b border-gray-300">
                     {broadsheet.subjects.map(s => (
                       <Fragment key={s.id}>
-                        <th className="p-1 text-center font-medium text-[9px]">CA1</th>
-                        <th className="p-1 text-center font-medium text-[9px]">CA2</th>
-                        <th className="p-1 text-center font-medium text-[9px]">Exam</th>
-                        <th className="p-1 text-center font-medium text-[9px]">Tot</th>
+                        <th className="p-1 text-center font-semibold text-[9px] border-r border-gray-200">CA1(20)</th>
+                        <th className="p-1 text-center font-semibold text-[9px] border-r border-gray-200">CA2(20)</th>
+                        <th className="p-1 text-center font-semibold text-[9px] border-r border-gray-200">EXAM(60)</th>
+                        <th className="p-1 text-center font-semibold text-[9px] border-r border-gray-200">TOTAL(100)</th>
                       </Fragment>
                     ))}
-                    <th className="p-1" colSpan="4"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {broadsheet.students.map((row, i) => (
                     <tr key={row.student.id} className={`border-t ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-yellow-50`}>
                       <td className="p-2 text-center font-bold sticky left-0 bg-inherit z-10">{i + 1}</td>
-                      <td className="p-2 text-center text-[10px]">{row.student.regNo}</td>
-                      <td className="p-2 font-medium whitespace-nowrap sticky left-[40px] bg-inherit z-10">{row.student.lastName} {row.student.firstName}</td>
+                      <td className="p-2 font-medium whitespace-nowrap sticky left-[30px] bg-inherit z-10">{row.student.lastName} {row.student.firstName}</td>
+                      <td className="p-2 text-center font-bold">{row.student.gender || '-'}</td>
                       {broadsheet.subjects.map(s => {
                         const d = row.details[s.id]
                         return d ? (
@@ -351,14 +595,14 @@ export default function FormTeacherDashboard() {
                             <td className="p-1 text-center">{d.ca1}</td>
                             <td className="p-1 text-center">{d.ca2}</td>
                             <td className="p-1 text-center">{d.exam}</td>
-                            <td className={`p-1 text-center font-bold ${d.total >= 80 ? 'text-green-700' : d.total >= 60 ? 'text-blue-700' : 'text-red-700'}`}>{d.total}</td>
+                            <td className={`p-1 text-center font-bold border-r border-gray-300 ${d.total >= 80 ? 'text-green-700' : d.total >= 60 ? 'text-blue-700' : 'text-red-700'}`}>{d.total}</td>
                           </Fragment>
                         ) : (
                           <Fragment key={s.id}>
                             <td className="p-1 text-center text-gray-300">-</td>
                             <td className="p-1 text-center text-gray-300">-</td>
                             <td className="p-1 text-center text-gray-300">-</td>
-                            <td className="p-1 text-center text-gray-300">-</td>
+                            <td className="p-1 text-center text-gray-300 border-r border-gray-300">-</td>
                           </Fragment>
                         )
                       })}
@@ -382,9 +626,9 @@ export default function FormTeacherDashboard() {
                   <tr className="bg-gray-100 font-bold text-[10px]">
                     <td className="p-2" colSpan="3"></td>
                     {broadsheet.subjects.map(s => (
-                      <td key={s.id} className="p-1 text-center text-gray-500" colSpan="4">Max 110</td>
+                      <td key={s.id} className="p-1 text-center text-gray-500" colSpan="4">Max 100</td>
                     ))}
-                    <td className="p-2" colSpan="4"></td>
+                    <td className="p-2" colSpan="3"></td>
                   </tr>
                 </tfoot>
               </table>
@@ -472,85 +716,88 @@ export default function FormTeacherDashboard() {
       {activeTab === 'students' && (
         <div className="grid lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Register Student</h3>
+            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Register Students</h3>
             <form onSubmit={handleCreateStudent} className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Registration Number</label>
-                <div className="flex gap-2">
-                  <input type="text" required value={studentForm.regNo}
-                    onChange={(e) => setStudentForm({ ...studentForm, regNo: e.target.value.toUpperCase() })}
-                    className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg text-sm"
-                    placeholder="PHS00001" />
-                  <button type="button" onClick={generateExamNumbers}
-                    className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-2 rounded-lg text-xs font-medium transition whitespace-nowrap">
-                    Generate Numbers
-                  </button>
-                </div>
-              </div>
-              {examNumbers.length > 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                  <p className="text-xs font-medium text-yellow-800 mb-2">Click a number to use it:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {examNumbers.map(num => (
-                      <button key={num} type="button" onClick={() => useExamNumber(num)}
-                        className="text-[10px] px-2 py-1 bg-white border border-yellow-300 rounded hover:bg-yellow-100 transition font-mono">
-                        {num}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-                  <input type="text" required value={studentForm.firstName}
-                    onChange={(e) => setStudentForm({ ...studentForm, firstName: e.target.value })}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-                  <input type="text" required value={studentForm.lastName}
-                    onChange={(e) => setStudentForm({ ...studentForm, lastName: e.target.value })}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" />
-                </div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Student Names (comma separated)</label>
+                <textarea required value={studentForm.names}
+                  onChange={(e) => setStudentForm({ ...studentForm, names: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm min-h-[100px]"
+                  placeholder="John Doe, Jane Smith, Bob Johnson, ..." />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Arm</label>
-                <select value={studentForm.arm} onChange={(e) => setStudentForm({ ...studentForm, arm: e.target.value })}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm">
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                </select>
+                <p className="text-xs text-gray-500 mb-3">Each student will get a unique exam number (PHS/xxxxx) automatically.</p>
+                <button type="submit" disabled={studentLoading}
+                  className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition disabled:opacity-50 text-sm">
+                  {studentLoading ? 'Creating...' : 'Register Students'}
+                </button>
               </div>
-              <button type="submit" disabled={studentLoading}
-                className="w-full bg-[#1B5E20] text-white py-2.5 rounded-lg font-semibold hover:bg-[#2E7D32] transition disabled:opacity-50 text-sm">
-                {studentLoading ? 'Creating...' : 'Register Student'}
-              </button>
             </form>
           </div>
 
           <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Students in {myClass?.name || 'Class'}</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-base sm:text-lg text-[#1B5E20]">Students in {myClass?.name || 'Class'}</h3>
+              <div className="flex gap-2">
+                <button onClick={handleDownloadXLSX}
+                  className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition cursor-pointer">
+                  Download XLSX
+                </button>
+                <button onClick={handleDownloadPDF}
+                  className="px-3 py-1.5 text-xs font-medium text-white bg-[#1B5E20] rounded-lg hover:bg-[#2E7D32] transition cursor-pointer">
+                  Download PDF
+                </button>
+              </div>
+            </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs sm:text-sm">
+              <table id="student-list-table" className="w-full text-xs sm:text-sm">
                 <thead>
                   <tr className="bg-gray-50">
-                    <th className="text-left p-2 font-medium text-gray-600">Reg No</th>
-                    <th className="text-left p-2 font-medium text-gray-600">Name</th>
-                    <th className="text-center p-2 font-medium text-gray-600">Arm</th>
+                    <th className="text-center p-2 font-medium text-gray-600 w-10">S/N</th>
+                    <th className="text-left p-2 pr-8 font-medium text-gray-600">NAMES<div className="text-[10px] font-normal text-gray-400">(click on names to edit)</div></th>
+                    <th className="text-center p-2 pl-8 font-medium text-gray-600 w-28">GENDER<div className="text-[10px] font-normal text-gray-400 whitespace-nowrap">click to change</div></th>
+                    <th className="text-center p-2 font-medium text-gray-600 pr-6">EXAM NUMBER</th>
+                    <th className="text-center p-2 font-medium text-gray-600 w-16">ACTION</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {broadsheet?.students?.map(s => (
-                    <tr key={s.student.id} className="border-t hover:bg-gray-50">
-                      <td className="p-2 text-xs">{s.student.regNo}</td>
-                      <td className="p-2 font-medium">{s.student.lastName} {s.student.firstName}</td>
-                      <td className="p-2 text-center">{s.student.arm}</td>
+                  {studentList.map((s, i) => {
+                    const sid = s._id || s.id
+                    const isEditing = editStudentId === sid
+                    return (
+                    <tr key={sid} className="border-t hover:bg-gray-50">
+                      <td className="p-2 text-center text-xs">{i + 1}</td>
+                      <td className="p-2 pr-8 font-medium whitespace-nowrap">
+                        {isEditing ? (
+                          <input type="text" value={editName} autoFocus
+                            onChange={(e) => setEditName(e.target.value)}
+                            onBlur={() => handleSaveName(s)}
+                            onKeyDown={(e) => handleEditKeyDown(e, s)}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm" />
+                        ) : (
+                          <button type="button" onClick={() => handleStartEdit(s)}
+                            className="text-left w-full hover:text-[#1B5E20] transition cursor-pointer">
+                            {s.lastName} {s.firstName}
+                          </button>
+                        )}
+                      </td>
+                      <td className="p-2 pl-8 text-center w-28">
+                        <button type="button" onClick={() => handleGenderToggle(s)}
+                          className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold text-white transition cursor-pointer ${s.gender === 'M' ? 'bg-blue-500' : s.gender === 'F' ? 'bg-pink-500' : 'bg-gray-300'}`}>
+                          {s.gender || '?'}
+                        </button>
+                      </td>
+                      <td className="p-2 text-xs text-center pr-6">{s.regNo}</td>
+                      <td className="p-2 text-center">
+                        <button type="button" onClick={() => setDeleteConfirm({ show: true, student: s })}
+                          className="px-2 py-1 text-xs font-medium text-red-600 border border-red-300 rounded hover:bg-red-50 transition cursor-pointer">
+                          Delete
+                        </button>
+                      </td>
                     </tr>
-                  ))}
-                  {(!broadsheet?.students?.length) && (
-                    <tr><td colSpan="3" className="text-center p-4 text-gray-400">No students</td></tr>
+                  )})}
+                  {!studentList.length && (
+                    <tr><td colSpan="5" className="text-center p-4 text-gray-400">No students</td></tr>
                   )}
                 </tbody>
               </table>
@@ -604,6 +851,29 @@ export default function FormTeacherDashboard() {
           ) : (
             <p className="text-gray-400 text-center py-8">No broadsheet data loaded.</p>
           )}
+        </div>
+      )}
+      {deleteConfirm.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Delete Student</h3>
+            <p className="text-sm text-gray-600 mb-1">
+              Are you sure you want to remove <strong>{deleteConfirm.student?.lastName} {deleteConfirm.student?.firstName}</strong>?
+            </p>
+            <p className="text-sm text-red-600 font-medium mb-5">
+              Every exam record of this student will be deleted from the system.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setDeleteConfirm({ show: false, student: null })}
+                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={handleDeleteStudent}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition cursor-pointer">
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

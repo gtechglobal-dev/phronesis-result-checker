@@ -7,6 +7,6 @@ const router = Router()
 
 router.post('/generate', protect, authorize('EXAM_OFFICER'), pinController.generate)
 router.get('/', protect, authorize('EXAM_OFFICER'), pinController.list)
-router.put('/:id/revoke', protect, authorize('EXAM_OFFICER'), pinController.revoke)
+router.delete('/:id', protect, authorize('EXAM_OFFICER'), pinController.deletePin)
 
 module.exports = router

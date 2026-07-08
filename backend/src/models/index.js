@@ -9,6 +9,7 @@ const ResultDetail = require('./ResultDetail')
 const ResultPin = require('./ResultPin')
 const ClassTeacher = require('./ClassTeacher')
 const SubjectAssignment = require('./SubjectAssignment')
+const SubjectTeacherConfig = require('./SubjectTeacherConfig')
 
 module.exports = {
   User,
@@ -21,5 +22,6 @@ module.exports = {
   ResultDetail,
   ResultPin,
   ClassTeacher,
-  SubjectAssignment
+  SubjectAssignment,
+  SubjectTeacherConfig
 }

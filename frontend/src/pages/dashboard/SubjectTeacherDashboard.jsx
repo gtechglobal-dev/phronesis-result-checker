@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { subjectTeacherAPI, classAPI } from '../../services/api'
+import { useSocketListener } from '../../context/SocketContext'
 
 export default function SubjectTeacherDashboard() {
   const [classes, setClasses] = useState([])
@@ -63,6 +64,14 @@ export default function SubjectTeacherDashboard() {
     loadScores()
   }, [selectedClassId, selectedSubjectId, selectedSession, selectedTerm])
 
+  const refreshScores = useCallback(() => {
+    if (selectedClassId && selectedSubjectId && selectedSession && selectedTerm) loadScores()
+  }, [selectedClassId, selectedSubjectId, selectedSession, selectedTerm])
+
+  useSocketListener('entity:updated', refreshScores)
+  useSocketListener('scores:saved', refreshScores)
+  useSocketListener('scores:submitted', refreshScores)
+
   const loadScores = async () => {
     try {
       setLoading(true)
@@ -84,7 +93,7 @@ export default function SubjectTeacherDashboard() {
 
   const updateScore = useCallback((studentId, field, value) => {
     if (submitted) return
-    const max = field === 'exam' ? 70 : field === 'ca1' || field === 'ca2' ? 20 : 0
+    const max = field === 'exam' ? 60 : field === 'ca1' || field === 'ca2' ? 20 : 0
     const val = Math.min(Math.max(parseInt(value) || 0, 0), max)
     const updated = { ...scores, [studentId]: { ...(scores[studentId] || {}), [field]: val } }
     setScores(updated)
@@ -214,7 +223,7 @@ export default function SubjectTeacherDashboard() {
                     <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Reg No</th>
                     <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">CA1 (20)</th>
                     <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">CA2 (20)</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Exam (70)</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">EXAM (60)</th>
                     <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Total</th>
                   </tr>
                 </thead>
@@ -239,7 +248,7 @@ export default function SubjectTeacherDashboard() {
                             className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
                         </td>
                         <td className="p-2 sm:p-3 text-center">
-                          <input type="number" min="0" max="70" value={form.exam ?? ''}
+                          <input type="number" min="0" max="60" value={form.exam ?? ''}
                             onChange={(e) => updateScore(student.id, 'exam', e.target.value)}
                             disabled={submitted}
                             className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />

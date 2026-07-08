@@ -5,6 +5,7 @@ const StudentSchema = new mongoose.Schema({
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   arm: { type: String, default: 'A' },
+  gender: { type: String, enum: ['M', 'F'] },
   pin: { type: String, default: '1234' },
   class: { type: mongoose.Schema.Types.ObjectId, ref: 'Class', required: true },
   parent: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

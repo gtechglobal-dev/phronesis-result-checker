@@ -21,7 +21,7 @@ const roles = [
     border: 'border-emerald-200',
     textColor: 'text-emerald-700',
     ring: 'ring-emerald-500',
-    backendRole: 'FORM_TEACHER',
+    backendRole: 'SUBJECT_TEACHER',
     dashboardPath: '/dashboard/subject-teacher'
   },
   {
@@ -75,7 +75,7 @@ export default function Login() {
 
   const openModal = (role) => {
     setSelectedRole(role)
-    setForm({ email: '', password: '', subject: '' })
+    setForm({ email: role.key === 'SUBJECT_TEACHER' ? 'Staff' : '', password: '', subject: '' })
     setError('')
   }
 
@@ -91,7 +91,10 @@ export default function Login() {
     try {
       const user = await login(form.email, form.password)
       const expectedRole = selectedRole.backendRole || selectedRole.key
-      if (user.role !== expectedRole) {
+      const allowedRoles = [expectedRole]
+      // Allow FORM_TEACHER to log in as Subject Teacher during transition
+      if (expectedRole === 'SUBJECT_TEACHER') allowedRoles.push('FORM_TEACHER')
+      if (!allowedRoles.includes(user.role)) {
         setError(`This account is not registered as ${selectedRole.title}`)
         setLoading(false)
         return
@@ -174,6 +177,8 @@ export default function Login() {
                   className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] focus:border-transparent outline-none text-sm"
                   placeholder="Enter username"
                   autoFocus
+                  readOnly={selectedRole?.key === 'SUBJECT_TEACHER'}
+                  disabled={selectedRole?.key === 'SUBJECT_TEACHER'}
                 />
               </div>
               <div className="relative">

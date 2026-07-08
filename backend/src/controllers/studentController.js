@@ -1,20 +1,23 @@
 const { Student, Class, Result, AcademicSession, Term } = require('../models')
+const { isString, escapeRegex, isValidObjectId, sanitizeString } = require('../utils/sanitize')
+const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 
 exports.getStudents = async (req, res) => {
   try {
     const { classId, className, arm, search } = req.query
     const where = {}
-    if (classId) where.class = classId
-    if (className) {
+    if (classId && isValidObjectId(classId)) where.class = classId
+    if (className && isString(className)) {
       const classRecord = await Class.findOne({ name: className })
       if (classRecord) where.class = classRecord._id
     }
-    if (arm) where.arm = arm
-    if (search) {
+    if (arm && isString(arm)) where.arm = arm
+    if (search && isString(search) && search.length < 100) {
+      const safe = escapeRegex(search)
       where.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { regNo: { $regex: search, $options: 'i' } }
+        { firstName: { $regex: safe, $options: 'i' } },
+        { lastName: { $regex: safe, $options: 'i' } },
+        { regNo: { $regex: safe, $options: 'i' } }
       ]
     }
 
@@ -24,7 +27,7 @@ exports.getStudents = async (req, res) => {
       .sort({ lastName: 1, firstName: 1 })
     res.json(students)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -32,12 +35,13 @@ exports.getUnlinkedStudents = async (req, res) => {
   try {
     const { classId, search } = req.query
     const where = { parent: { $exists: false } }
-    if (classId) where.class = classId
-    if (search) {
+    if (classId && isValidObjectId(classId)) where.class = classId
+    if (search && isString(search) && search.length < 100) {
+      const safe = escapeRegex(search)
       where.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { regNo: { $regex: search, $options: 'i' } }
+        { firstName: { $regex: safe, $options: 'i' } },
+        { lastName: { $regex: safe, $options: 'i' } },
+        { regNo: { $regex: safe, $options: 'i' } }
       ]
     }
     const students = await Student.find(where)
@@ -46,7 +50,7 @@ exports.getUnlinkedStudents = async (req, res) => {
       .limit(50)
     res.json(students)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -58,22 +62,38 @@ exports.getStudent = async (req, res) => {
     if (!student) return res.status(404).json({ message: 'Student not found' })
     res.json(student)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
 exports.createStudent = async (req, res) => {
   try {
     const { regNo, firstName, lastName, classId, arm } = req.body
-    const existing = await Student.findOne({ regNo })
+    if (!isString(regNo) || !isString(firstName) || !isString(lastName) || !isValidObjectId(classId)) {
+      return res.status(400).json({ message: 'Invalid input' })
+    }
+    const normalizedRegNo = regNo.trim().toUpperCase()
+    const existing = await Student.findOne({ regNo: normalizedRegNo })
     if (existing) return res.status(400).json({ message: 'Registration number already exists' })
 
-    const student = await Student.create({ regNo, firstName, lastName, class: classId, arm })
+    const gender = req.body.gender === 'M' || req.body.gender === 'F' ? req.body.gender : undefined
+    const student = await Student.create({ regNo: normalizedRegNo, firstName: sanitizeString(firstName.trim()).toUpperCase(), lastName: sanitizeString(lastName.trim()).toUpperCase(), class: classId, arm: arm || 'A', gender })
     await student.populate('class')
     res.status(201).json(student)
+    try { emitBroadcast('entity:updated', { type: 'student' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
+}
+
+const generateUniqueRegNo = async () => {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const num = String(Math.floor(Math.random() * 100000)).padStart(5, '0')
+    const regNo = `PHS/${num}`
+    const exists = await Student.findOne({ regNo })
+    if (!exists) return regNo
+  }
+  return null
 }
 
 exports.bulkCreateStudents = async (req, res) => {
@@ -83,29 +103,36 @@ exports.bulkCreateStudents = async (req, res) => {
 
     let created = 0
     for (const s of students) {
-      const existing = await Student.findOne({ regNo: s.regNo })
-      if (!existing) {
-        await Student.create({ regNo: s.regNo, firstName: s.firstName, lastName: s.lastName, class: s.classId, arm: s.arm || 'A' })
-        created++
+      if (!s.firstName || !s.lastName || !s.classId) {
+        return res.status(400).json({ message: `Missing required field for student "${s.firstName || ''} ${s.lastName || ''}"` })
       }
+      const regNo = await generateUniqueRegNo()
+      if (!regNo) return res.status(500).json({ message: 'Could not generate unique exam number after 50 attempts' })
+      const gender = s.gender === 'M' || s.gender === 'F' ? s.gender : undefined
+      await Student.create({ regNo, firstName: s.firstName.toUpperCase(), lastName: s.lastName.toUpperCase(), class: s.classId, gender })
+      created++
     }
     res.status(201).json({ message: `${created} students created` })
+    try { emitBroadcast('entity:updated', { type: 'student' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    console.error('bulkCreateStudents error:', error)
+    res.status(500).json({ message: `Bulk create failed: ${error.message}` })
   }
 }
 
 exports.updateStudent = async (req, res) => {
   try {
     const { firstName, lastName, classId, arm } = req.body
+    const gender = req.body.gender === 'M' || req.body.gender === 'F' ? req.body.gender : undefined
     const student = await Student.findByIdAndUpdate(
       req.params.id,
-      { firstName, lastName, class: classId, arm },
+      { firstName: firstName?.toUpperCase(), lastName: lastName?.toUpperCase(), class: classId, arm, gender },
       { new: true }
     ).populate('class')
     res.json(student)
+    try { emitBroadcast('entity:updated', { type: 'student' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -120,24 +147,43 @@ exports.getMyChildren = async (req, res) => {
       })
     res.json(students)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
 exports.getStudentsByClass = async (req, res) => {
   try {
-    const classTeacher = await require('../models/ClassTeacher').findOne({
-      user: req.user.id, class: req.params.classId
-    })
-    if (!classTeacher && req.user.role !== 'EXAM_OFFICER') {
-      return res.status(403).json({ message: 'Not assigned to this class' })
+    if (!isValidObjectId(req.params.classId)) {
+      return res.status(400).json({ message: 'Invalid class ID' })
+    }
+    if (req.user.role !== 'EXAM_OFFICER') {
+      const classTeacher = await require('../models/ClassTeacher').findOne({
+        user: req.user.id, class: req.params.classId
+      })
+      if (!classTeacher) {
+        const subjectAssignment = await require('../models/SubjectAssignment').findOne({
+          user: req.user.id, class: req.params.classId
+        })
+        if (!subjectAssignment) return res.status(403).json({ message: 'Not assigned to this class' })
+      }
     }
     const students = await Student.find({ class: req.params.classId })
       .populate('class')
       .sort({ lastName: 1, firstName: 1 })
     res.json(students)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
+  }
+}
+
+exports.deleteStudent = async (req, res) => {
+  try {
+    const student = await Student.findByIdAndDelete(req.params.id)
+    if (!student) return res.status(404).json({ message: 'Student not found' })
+    res.json({ message: 'Student deleted' })
+    try { emitBroadcast('entity:updated', { type: 'student' }) } catch (e) {}
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -146,22 +192,15 @@ exports.generateExamNumbers = async (req, res) => {
     const { classId, count } = req.body
     if (!classId || !count) return res.status(400).json({ message: 'classId and count required' })
 
-    const lastStudent = await Student.findOne({ regNo: { $regex: '^PHS' } })
-      .sort({ regNo: -1 })
-
-    let nextNum = 1
-    if (lastStudent) {
-      const match = lastStudent.regNo.match(/PHS(\d{5})/)
-      if (match) nextNum = parseInt(match[1]) + 1
-    }
-
     const numbers = []
     for (let i = 0; i < count; i++) {
-      numbers.push(`PHS${String(nextNum + i).padStart(5, '0')}`)
+      const regNo = await generateUniqueRegNo()
+      if (!regNo) return res.status(500).json({ message: 'Could not generate unique exam number after 50 attempts' })
+      numbers.push(regNo)
     }
 
     res.json({ numbers })
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }

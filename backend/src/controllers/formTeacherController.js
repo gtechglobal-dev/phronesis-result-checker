@@ -1,4 +1,5 @@
 const { ClassTeacher, Student, Result, ResultDetail, Class, Term, Subject } = require('../models')
+const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 
 const calculateGrade = (score) => {
   if (score >= 80) return { grade: 'A', remark: 'Excellent' }
@@ -14,11 +15,11 @@ exports.getBroadsheet = async (req, res) => {
     const { sessionId, termId } = req.query
     if (!sessionId || !termId) return res.status(400).json({ message: 'sessionId and termId required' })
 
-    const classTeacher = await ClassTeacher.findOne({ user: req.user.id })
-      .populate({ path: 'class', populate: { path: 'subjects', options: { sort: { name: 1 } } } })
+    const classTeacher = await ClassTeacher.findOne({ user: req.user.id }).populate('class')
     if (!classTeacher) return res.status(403).json({ message: 'Not assigned as form teacher' })
 
     const classRecord = classTeacher.class
+    const classSubjects = await Subject.find({ class: classRecord._id }).sort({ createdAt: 1 })
     const students = await Student.find({ class: classRecord._id }).sort({ lastName: 1 })
 
     const results = await Result.find({ class: classRecord._id, session: sessionId, term: termId })
@@ -37,7 +38,7 @@ exports.getBroadsheet = async (req, res) => {
       let totalScore = 0
       let subjectCount = 0
 
-      for (const sub of classRecord.subjects) {
+      for (const sub of classSubjects) {
         const detail = result?.details.find(d => d.subject._id.toString() === sub._id.toString())
         if (detail) {
           details[sub._id] = { ca1: detail.ca1, ca2: detail.ca2, exam: detail.exam, total: detail.total, grade: detail.grade, remark: detail.remark }
@@ -50,7 +51,7 @@ exports.getBroadsheet = async (req, res) => {
 
       const average = subjectCount > 0 ? Math.round((totalScore / subjectCount) * 100) / 100 : 0
       return {
-        student: { id: student._id, regNo: student.regNo, firstName: student.firstName, lastName: student.lastName, arm: student.arm },
+        student: { id: student._id, regNo: student.regNo, firstName: student.firstName, lastName: student.lastName, arm: student.arm, gender: student.gender },
         details,
         totalScore,
         average,
@@ -69,13 +70,13 @@ exports.getBroadsheet = async (req, res) => {
 
 res.json({
       class: { id: classRecord._id, name: classRecord.name, level: classRecord.level },
-      subjects: classRecord.subjects,
+      subjects: classSubjects,
       students: rows,
       daysOpen: termData?.daysOpen ?? null,
       nextResumptionDate: termData?.nextResumptionDate ?? null
     })
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -84,8 +85,9 @@ exports.updateComment = async (req, res) => {
     const { resultId, teacherComment } = req.body
     await Result.findByIdAndUpdate(resultId, { teacherComment })
     res.json({ message: 'Comment saved' })
+    try { emitToRole('EXAM_OFFICER', 'result:comment', { resultId }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -99,8 +101,9 @@ exports.updateSettings = async (req, res) => {
 
     await Term.findByIdAndUpdate(termId, { daysOpen: daysOpen != null ? parseInt(daysOpen) : undefined, nextResumptionDate })
     res.json({ message: 'Settings saved' })
+    try { emitBroadcast('entity:updated', { type: 'settings' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -118,8 +121,9 @@ exports.updateAttendance = async (req, res) => {
       }
     }
     res.json({ message: 'Attendance saved' })
+    try { emitBroadcast('entity:updated', { type: 'attendance' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -153,7 +157,8 @@ exports.submitBroadsheet = async (req, res) => {
     }
 
     res.json({ message: 'Broadsheet submitted successfully' })
+    try { emitToRole('EXAM_OFFICER', 'result:status', { class: classTeacher.class._id, sessionId, termId, status: 'SUBMITTED' }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }

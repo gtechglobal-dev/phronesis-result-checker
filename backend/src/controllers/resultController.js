@@ -1,4 +1,6 @@
 const { Result, ResultDetail, Student, Class, AcademicSession, Term, ResultPin, User } = require('../models')
+const { isString, isValidObjectId, escapeRegex } = require('../utils/sanitize')
+const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 
 const calculateGrade = (score) => {
   if (score >= 80) return { grade: 'A', remark: 'Excellent' }
@@ -13,14 +15,20 @@ exports.createResult = async (req, res) => {
   try {
     const { studentId, classId, className, sessionId, termId, scores } = req.body
 
+    if (!scores || !Array.isArray(scores) || scores.length === 0) {
+      return res.status(400).json({ message: 'Scores are required' })
+    }
+
     if (className && !classId) {
+      if (!isString(className)) return res.status(400).json({ message: 'Invalid class name' })
       const classRecord = await Class.findOne({ name: className })
       if (!classRecord) return res.status(404).json({ message: 'Class not found' })
       classId = classRecord._id
     }
 
-    const existing = await Result.findOne({ student: studentId, session: sessionId, term: termId })
-    if (existing) return res.status(400).json({ message: 'Result already exists for this student in this session/term' })
+    if (!isValidObjectId(sessionId) || !isValidObjectId(termId)) {
+      return res.status(400).json({ message: 'Invalid session or term' })
+    }
 
     let totalScore = 0
     const details = scores.map((s) => {
@@ -53,8 +61,9 @@ exports.createResult = async (req, res) => {
       .populate('student class session term examOfficer', 'firstName lastName')
 
     res.status(201).json(populatedResult)
+    try { emitToRole('EXAM_OFFICER', 'result:created', { result: populatedResult }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -70,7 +79,7 @@ exports.getStudentResults = async (req, res) => {
       .sort({ 'session.createdAt': -1, 'term.createdAt': -1 })
     res.json(results)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -92,7 +101,7 @@ exports.getResult = async (req, res) => {
 
     res.json(result)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -101,8 +110,9 @@ exports.toggleWithhold = async (req, res) => {
     const { withheld } = req.body
     const result = await Result.findByIdAndUpdate(req.params.id, { withheld }, { new: true })
     res.json({ message: withheld ? 'Result withheld' : 'Result released', result })
+    try { emitToRole('EXAM_OFFICER', 'result:withheld', { resultId: req.params.id, withheld }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -115,8 +125,9 @@ exports.addTeacherComment = async (req, res) => {
       { new: true }
     )
     res.json(result)
+    try { emitToRole('EXAM_OFFICER', 'result:comment', { result }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -130,26 +141,38 @@ exports.updatePositions = async (req, res) => {
       await Result.findByIdAndUpdate(results[i]._id, { position: i + 1 })
     }
     res.json({ message: 'Positions updated successfully' })
+    try { emitToRole('EXAM_OFFICER', 'result:positions', { classId, sessionId, termId }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
 exports.checkByRegNo = async (req, res) => {
   try {
-    const { regNo, sessionId, termId, pin } = req.query
-    const student = await Student.findOne({ regNo }).populate('class')
+    const { regNo, sessionId, termId, pin } = req.body
+
+    if (!isString(regNo) || !isString(pin) || !isString(sessionId) || !isString(termId)) {
+      return res.status(400).json({ message: 'Missing required fields' })
+    }
+    if (!/^\d{10}$/.test(pin)) {
+      return res.status(400).json({ message: 'Invalid PIN format' })
+    }
+
+    const student = await Student.findOne({ regNo: regNo.trim().toUpperCase() }).populate('class')
     if (!student) return res.status(404).json({ message: 'Student not found' })
 
     const pinRecord = await ResultPin.findOne({ pin })
     if (!pinRecord || !pinRecord.isActive) return res.status(401).json({ message: 'Invalid or expired PIN' })
-    if (pinRecord.regNo !== regNo) return res.status(401).json({ message: 'PIN does not match this registration number' })
     if (pinRecord.usedCount >= pinRecord.maxUses) {
       await ResultPin.findByIdAndUpdate(pinRecord._id, { isActive: false })
       return res.status(401).json({ message: 'PIN has expired (max uses reached)' })
     }
 
-    await ResultPin.findByIdAndUpdate(pinRecord._id, { $inc: { usedCount: 1 } })
+    await ResultPin.findByIdAndUpdate(pinRecord._id, {
+      $inc: { usedCount: 1 },
+      $push: { usedBy: { regNo: regNo.trim().toUpperCase(), usedAt: new Date() } },
+    })
+    try { emitToRole('EXAM_OFFICER', 'pin:used', { pin: pinRecord.pin, regNo: regNo.trim().toUpperCase() }) } catch (e) {}
 
     const result = await Result.findOne({ student: student._id, session: sessionId, term: termId })
       .populate({
@@ -174,7 +197,7 @@ exports.checkByRegNo = async (req, res) => {
       }
     })
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -183,8 +206,9 @@ exports.updatePrincipalComment = async (req, res) => {
     const { principalComment } = req.body
     const result = await Result.findByIdAndUpdate(req.params.id, { principalComment }, { new: true })
     res.json(result)
+    try { emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -205,7 +229,7 @@ exports.getPendingResults = async (req, res) => {
       .sort({ 'class.name': 1, 'student.lastName': 1 })
     res.json(results)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -242,7 +266,7 @@ exports.getFormTeacherClassResults = async (req, res) => {
     const classInfo = await Class.findById(classId)
     res.json({ class: classInfo, results })
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -273,6 +297,32 @@ exports.getParentChildrenResults = async (req, res) => {
 
     res.json(mapped)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
+  }
+}
+
+exports.getManageResults = async (req, res) => {
+  try {
+    const where = { status: { $in: ['APPROVED', 'PUBLISHED'] } }
+    const results = await Result.find(where)
+      .populate('student class session term')
+      .sort({ 'class.name': 1, 'student.lastName': 1 })
+    res.json(results)
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
+  }
+}
+
+exports.updateResultStatus = async (req, res) => {
+  try {
+    const { status } = req.body
+    const valid = ['SUBMITTED', 'APPROVED', 'PUBLISHED']
+    if (!valid.includes(status)) return res.status(400).json({ message: 'Invalid status' })
+    const result = await Result.findByIdAndUpdate(req.params.id, { status }, { new: true })
+    if (!result) return res.status(404).json({ message: 'Result not found' })
+    res.json({ message: `Result ${status.toLowerCase()}`, result })
+    try { emitToRole('EXAM_OFFICER', 'result:status', { resultId: req.params.id, status }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }

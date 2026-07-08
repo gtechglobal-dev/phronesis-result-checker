@@ -18,10 +18,12 @@ export function AuthProvider({ children }) {
           setUser(res.data)
           localStorage.setItem('user', JSON.stringify(res.data))
         })
-        .catch(() => {
-          localStorage.removeItem('token')
-          localStorage.removeItem('user')
-          setUser(null)
+        .catch((err) => {
+          if (err.response?.status === 401) {
+            localStorage.removeItem('token')
+            localStorage.removeItem('user')
+            setUser(null)
+          }
         })
         .finally(() => setLoading(false))
     } else {

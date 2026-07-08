@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { SocketProvider } from './context/SocketContext'
 import Layout from './components/Layout'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
@@ -24,6 +25,7 @@ function DashboardRouter() {
   if (!user) return <Navigate to="/login" />
   if (user.role === 'EXAM_OFFICER') return <ExamOfficerDashboard />
   if (user.role === 'FORM_TEACHER') return <FormTeacherDashboard />
+  if (user.role === 'SUBJECT_TEACHER') return <SubjectTeacherDashboard />
   if (user.role === 'PARENT') return <ParentDashboard />
   return <Navigate to="/" />
 }
@@ -31,6 +33,7 @@ function DashboardRouter() {
 function App() {
   return (
     <AuthProvider>
+      <SocketProvider>
       <BrowserRouter>
         <Routes>
           <Route element={<Layout />}>
@@ -54,7 +57,7 @@ function App() {
               </ProtectedRoute>
             } />
             <Route path="/dashboard/subject-teacher" element={
-              <ProtectedRoute allowedRoles={['FORM_TEACHER']}>
+              <ProtectedRoute allowedRoles={['SUBJECT_TEACHER', 'FORM_TEACHER']}>
                 <SubjectTeacherDashboard />
               </ProtectedRoute>
             } />
@@ -74,6 +77,7 @@ function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </SocketProvider>
     </AuthProvider>
   )
 }

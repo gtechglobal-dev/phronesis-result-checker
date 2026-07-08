@@ -1,4 +1,6 @@
 const { SubjectAssignment, Result, ResultDetail, Student, Subject, Class } = require('../models')
+const { isValidObjectId, isString } = require('../utils/sanitize')
+const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 
 exports.getAssignment = async (req, res) => {
   try {
@@ -7,7 +9,7 @@ exports.getAssignment = async (req, res) => {
       .populate({ path: 'class', populate: { path: 'students', options: { sort: { lastName: 1 } } } })
     res.json(assignments)
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -33,7 +35,7 @@ exports.getScores = async (req, res) => {
 
     res.json({ students, scores: scoreMap, submitted: results.some(r => r.status === 'SUBMITTED') })
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -42,6 +44,9 @@ exports.saveScores = async (req, res) => {
     const { sessionId, termId, classId, subjectId, scores } = req.body
     if (!sessionId || !termId || !classId || !subjectId || !scores) {
       return res.status(400).json({ message: 'Missing required fields' })
+    }
+    if (!Array.isArray(scores) || scores.length > 100) {
+      return res.status(400).json({ message: 'Invalid scores data' })
     }
 
     const existingSubmitted = await Result.findOne({ class: classId, session: sessionId, term: termId, status: 'SUBMITTED' })
@@ -91,8 +96,9 @@ exports.saveScores = async (req, res) => {
     }
 
     res.json({ message: 'Scores saved' })
+    try { emitToRole('EXAM_OFFICER', 'scores:saved', { sessionId, termId, classId, subjectId }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
 
@@ -115,7 +121,8 @@ exports.submitScores = async (req, res) => {
     }
 
     res.json({ message: 'Scores submitted successfully' })
+    try { emitToRole('EXAM_OFFICER', 'scores:submitted', { sessionId, termId, classId, subjectId }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message })
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
