@@ -115,6 +115,7 @@ export const formTeacherAPI = {
   updateSettings: (data) => api.post("/form-teacher/settings", data),
   updateAttendance: (data) => api.post("/form-teacher/attendance", data),
   submitBroadsheet: (data) => api.post("/form-teacher/submit", data),
+  reopenSubject: (data) => api.post("/form-teacher/reopen-subject", data),
 };
 
 export default api;

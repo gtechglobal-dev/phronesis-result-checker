@@ -42,19 +42,23 @@ export default function FormTeacherDashboard() {
   const [attendanceData, setAttendanceData] = useState({})
   const [savingAttendance, setSavingAttendance] = useState(false)
   const [savingSettings, setSavingSettings] = useState(false)
+  const [reviewMessage, setReviewMessage] = useState({ type: '', text: '' })
+  const [reopening, setReopening] = useState(null)
+  const [reopenModal, setReopenModal] = useState({ show: false, subjectId: null, subjectName: '' })
 
   useEffect(() => { sessionStorage.setItem('ftActiveTab', activeTab) }, [activeTab])
 
   const tabs = [
     { id: 'broadsheet', label: 'Broadsheet' },
     { id: 'attendance', label: 'Attendance' },
+    { id: 'subjectReview', label: 'Subject Review' },
     { id: 'students', label: 'Students' },
     { id: 'submit', label: 'Submit' }
   ]
 
   const showMessage = (type, text) => {
     setMessage({ type, text })
-    setTimeout(() => setMessage({ type: '', text: '' }), 4000)
+    setTimeout(() => setMessage({ type: '', text: '' }), 3000)
   }
 
   useEffect(() => {
@@ -172,20 +176,7 @@ export default function FormTeacherDashboard() {
     setDeleteConfirm({ show: false, student: null })
   }
 
-  useEffect(() => {
-    loadStudentList()
-    if (myClass && selectedSession && selectedTerm) loadBroadsheet()
-  }, [myClass, selectedSession, selectedTerm, loadStudentList])
-
-  const refreshBroadsheet = useCallback(() => {
-    if (selectedSession && selectedTerm) loadBroadsheet()
-  }, [selectedSession, selectedTerm])
-
-  useSocketListener('entity:updated', refreshBroadsheet)
-  useSocketListener('result:status', refreshBroadsheet)
-  useSocketListener('result:withheld', refreshBroadsheet)
-
-  const loadBroadsheet = async () => {
+  const loadBroadsheet = useCallback(async () => {
     if (!selectedSession || !selectedTerm) return
     try {
       setLoading(true)
@@ -204,7 +195,22 @@ export default function FormTeacherDashboard() {
     } catch (err) {
       showMessage('error', err.response?.data?.message || 'Failed to load broadsheet')
     } finally { setLoading(false) }
-  }
+  }, [selectedSession, selectedTerm])
+
+  useEffect(() => {
+    loadStudentList()
+    if (myClass && selectedSession && selectedTerm) loadBroadsheet()
+  }, [myClass, selectedSession, selectedTerm, loadStudentList, loadBroadsheet])
+
+  const refreshBroadsheet = useCallback(() => {
+    loadBroadsheet()
+  }, [loadBroadsheet])
+
+  useSocketListener('entity:updated', refreshBroadsheet)
+  useSocketListener('result:status', refreshBroadsheet)
+  useSocketListener('result:withheld', refreshBroadsheet)
+  useSocketListener('scores:saved', refreshBroadsheet)
+  useSocketListener('scores:submitted', refreshBroadsheet)
 
   const loadSessions = async () => {
     try { const res = await classAPI.getSessions(); setSessions(res.data) } catch {}
@@ -290,6 +296,21 @@ export default function FormTeacherDashboard() {
     } finally { setSubmitting(false) }
   }
 
+  const handleReopenSubject = async () => {
+    const { subjectId, subjectName } = reopenModal
+    setReopenModal({ show: false, subjectId: null, subjectName: '' })
+    setReopening(subjectId)
+    try {
+      await formTeacherAPI.reopenSubject({ sessionId: selectedSession, termId: selectedTerm, subjectId })
+      setReviewMessage({ type: 'success', text: `"${subjectName}" reopened for editing` })
+      setTimeout(() => setReviewMessage({ type: '', text: '' }), 4000)
+      loadBroadsheet()
+    } catch (err) {
+      setReviewMessage({ type: 'error', text: err.response?.data?.message || 'Error reopening subject' })
+      setTimeout(() => setReviewMessage({ type: '', text: '' }), 4000)
+    } finally { setReopening(null) }
+  }
+
   const getGrade = (score) => {
     if (score >= 80) return { grade: 'A', color: 'text-green-700 bg-green-100' }
     if (score >= 70) return { grade: 'B', color: 'text-blue-700 bg-blue-100' }
@@ -355,7 +376,7 @@ export default function FormTeacherDashboard() {
             <td class="name">${row.student.lastName} ${row.student.firstName}</td>
             <td>${row.student.gender || '-'}</td>
             ${subjects.map(s => {
-              const d = row.details[s.id]
+              const d = row.details[s._id || s.id]
               return d ? `<td>${d.ca1}</td><td>${d.ca2}</td><td>${d.exam}</td><td class="total">${d.total}</td>`
                 : '<td>-</td><td>-</td><td>-</td><td>-</td>'
             }).join('')}
@@ -439,7 +460,7 @@ export default function FormTeacherDashboard() {
       pdf.rect(x, y - 5, colW, rowH)
       x += colW
       broadsheet.subjects.forEach(s => {
-        const d = row.details[s.id]
+        const d = row.details[s._id || s.id]
         const vals = d ? [d.ca1, d.ca2, d.exam, d.total] : ['-', '-', '-', '-']
         vals.forEach(v => {
           pdf.text(String(v), x + colW / 2, y, { align: 'center' })
@@ -471,7 +492,7 @@ export default function FormTeacherDashboard() {
     const data = broadsheet.students.map((row, i) => {
       const rowData = [i + 1, `${row.student.lastName} ${row.student.firstName}`, row.student.gender || '-']
       broadsheet.subjects.forEach(s => {
-        const d = row.details[s.id]
+        const d = row.details[s._id || s.id]
         if (d) {
           rowData.push(d.ca1, d.ca2, d.exam, d.total)
         } else {
@@ -499,6 +520,8 @@ export default function FormTeacherDashboard() {
   }
 
   return (
+    <>
+    <style>{`@keyframes fadeInUp{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}`}</style>
     <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-[#1B5E20]">Form Teacher Dashboard</h1>
@@ -508,9 +531,16 @@ export default function FormTeacherDashboard() {
       </div>
 
       {message.text && (
-        <div className={`mb-4 px-4 py-2 rounded-lg text-sm flex justify-between items-center ${message.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+        <div className="fixed bottom-12 sm:bottom-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg shadow-lg text-xs sm:text-sm font-medium flex items-center gap-2 pointer-events-auto"
+          style={{ animation: 'fadeInUp 0.3s ease-out', backgroundColor: message.type === 'error' ? '#FEE2E2' : '#D1FAE5', border: `1px solid ${message.type === 'error' ? '#FCA5A5' : '#6EE7B7'}`, color: message.type === 'error' ? '#991B1B' : '#065F46' }}
+        >
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {message.type === 'error'
+              ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            }
+          </svg>
           <span>{message.text}</span>
-          <button onClick={() => setMessage({ type: '', text: '' })} className="ml-2 font-bold text-lg">&times;</button>
         </div>
       )}
 
@@ -556,28 +586,28 @@ export default function FormTeacherDashboard() {
           </div>
 
           {broadsheet ? (
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[calc(100vh-320px)]">
               <table className="w-full text-xs sm:text-sm border-collapse">
-                <thead>
-                  <tr className="bg-[#1B5E20] text-white">
-                    <th className="p-2 text-center font-medium text-[10px] sticky left-0 bg-[#1B5E20] z-10" rowSpan="2">S/N</th>
-                    <th className="p-2 text-left font-medium text-[10px] sticky left-[40px] bg-[#1B5E20] z-10" rowSpan="2">STUDENT'S NAMES</th>
-                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">G</th>
+                <thead className="sticky top-0 z-20">
+                    <tr className="bg-[#1B5E20] text-white">
+                    <th className="p-2 text-center font-semibold text-xs sticky left-0 bg-[#1B5E20] z-30" rowSpan="2">S/N</th>
+                    <th className="p-2 text-left font-semibold text-xs sticky left-[40px] bg-[#1B5E20] z-30" rowSpan="2">STUDENT'S NAMES</th>
+                    <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">G</th>
                     {broadsheet.subjects.map(s => (
-                      <th key={s.id} className="p-1 text-center font-medium text-[10px] border-r border-green-800" colSpan="4">{s.name}</th>
+                      <th key={s._id || s.id} className="p-1 text-center font-semibold text-xs border-r border-green-800 bg-[#1B5E20]" colSpan="4">{s.name}</th>
                     ))}
-                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">TOTAL</th>
-                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">AVERAGE</th>
-                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">POSITION</th>
-                    <th className="p-2 text-center font-medium text-[10px]" rowSpan="2">Comment</th>
+                    <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">TOTAL</th>
+                    <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">AVERAGE</th>
+                    <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">POSITION</th>
+                    <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">Comment</th>
                   </tr>
                   <tr className="bg-[#E8F5E9] text-gray-700 border-b border-gray-300">
                     {broadsheet.subjects.map(s => (
-                      <Fragment key={s.id}>
-                        <th className="p-1 text-center font-semibold text-[9px] border-r border-gray-200">CA1(20)</th>
-                        <th className="p-1 text-center font-semibold text-[9px] border-r border-gray-200">CA2(20)</th>
-                        <th className="p-1 text-center font-semibold text-[9px] border-r border-gray-200">EXAM(60)</th>
-                        <th className="p-1 text-center font-semibold text-[9px] border-r border-gray-200">TOTAL(100)</th>
+                      <Fragment key={s._id || s.id}>
+                        <th className="p-1 text-center font-semibold text-[11px] border-r border-gray-200 bg-[#E8F5E9]">CA1(20)</th>
+                        <th className="p-1 text-center font-semibold text-[11px] border-r border-gray-200 bg-[#E8F5E9]">CA2(20)</th>
+                        <th className="p-1 text-center font-semibold text-[11px] border-r border-gray-200 bg-[#E8F5E9]">EXAM(60)</th>
+                        <th className="p-1 text-center font-semibold text-[11px] border-r border-gray-200 bg-[#E8F5E9]">TOTAL(100)</th>
                       </Fragment>
                     ))}
                   </tr>
@@ -589,16 +619,16 @@ export default function FormTeacherDashboard() {
                       <td className="p-2 font-medium whitespace-nowrap sticky left-[30px] bg-inherit z-10">{row.student.lastName} {row.student.firstName}</td>
                       <td className="p-2 text-center font-bold">{row.student.gender || '-'}</td>
                       {broadsheet.subjects.map(s => {
-                        const d = row.details[s.id]
+                        const d = row.details[s._id || s.id]
                         return d ? (
-                          <Fragment key={s.id}>
+                          <Fragment key={s._id || s.id}>
                             <td className="p-1 text-center">{d.ca1}</td>
                             <td className="p-1 text-center">{d.ca2}</td>
                             <td className="p-1 text-center">{d.exam}</td>
                             <td className={`p-1 text-center font-bold border-r border-gray-300 ${d.total >= 80 ? 'text-green-700' : d.total >= 60 ? 'text-blue-700' : 'text-red-700'}`}>{d.total}</td>
                           </Fragment>
                         ) : (
-                          <Fragment key={s.id}>
+                          <Fragment key={s._id || s.id}>
                             <td className="p-1 text-center text-gray-300">-</td>
                             <td className="p-1 text-center text-gray-300">-</td>
                             <td className="p-1 text-center text-gray-300">-</td>
@@ -609,24 +639,24 @@ export default function FormTeacherDashboard() {
                       <td className="p-2 text-center font-bold">{row.totalScore}</td>
                       <td className="p-2 text-center">{row.average}</td>
                       <td className="p-2 text-center font-bold">{row.position || '-'}</td>
-                      <td className="p-2 text-left text-[10px] max-w-[150px]">
+                      <td className="p-2 text-left text-xs max-w-[150px]">
                         {row.resultId ? (
                           <input type="text" defaultValue={row.teacherComment || generateComment(row.totalScore, row.subjectCount)}
                             onBlur={(e) => handleSaveComment(row.resultId, e.target.value)}
-                            className="w-full px-1 py-0.5 border border-gray-200 rounded text-[10px] bg-transparent focus:bg-white focus:border-[#1B5E20] outline-none"
+                            className="w-full px-1 py-0.5 border border-gray-200 rounded text-xs bg-transparent focus:bg-white focus:border-[#1B5E20] outline-none"
                             placeholder="Add comment..." />
                         ) : (
-                          <span className="text-gray-400 text-[10px]">No result</span>
+                          <span className="text-gray-400 text-xs">No result</span>
                         )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-100 font-bold text-[10px]">
+                  <tr className="bg-gray-100 font-bold text-xs">
                     <td className="p-2" colSpan="3"></td>
                     {broadsheet.subjects.map(s => (
-                      <td key={s.id} className="p-1 text-center text-gray-500" colSpan="4">Max 100</td>
+                      <td key={s._id || s.id} className="p-1 text-center text-gray-500" colSpan="4">Max 100</td>
                     ))}
                     <td className="p-2" colSpan="3"></td>
                   </tr>
@@ -710,6 +740,98 @@ export default function FormTeacherDashboard() {
           ) : (
             <p className="text-gray-400 text-center py-8">Load broadsheet data first.</p>
           )}
+        </div>
+      )}
+
+      {activeTab === 'subjectReview' && (
+        <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
+          <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Subject Review</h3>
+          <p className="text-sm text-gray-500 mb-4">Reopen a submitted subject so the subject teacher can make changes and resubmit.</p>
+
+          {reviewMessage.text && (
+            <div className={`mb-4 px-4 py-2 rounded-lg text-sm flex justify-between items-center ${reviewMessage.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+              <span>{reviewMessage.text}</span>
+              <button onClick={() => setReviewMessage({ type: '', text: '' })} className="ml-2 font-bold text-lg">&times;</button>
+            </div>
+          )}
+
+          {!broadsheet ? (
+            <p className="text-gray-400 text-center py-8">Load the broadsheet first to see subject status.</p>
+          ) : broadsheet.subjects.length === 0 ? (
+            <p className="text-gray-400 text-center py-4">No subjects found for this class.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs sm:text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b">
+                    <th className="text-left p-3 font-medium text-gray-600">Subject</th>
+                    <th className="text-center p-3 font-medium text-gray-600">Students with Scores</th>
+                    <th className="text-center p-3 font-medium text-gray-600">Status</th>
+                    <th className="text-center p-3 font-medium text-gray-600">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {broadsheet.subjects.map(s => {
+                    const sid = s._id || s.id
+                    const studentsWithScores = broadsheet.students.filter(row => row.details[sid] != null)
+                    const anySubmitted = studentsWithScores.some(row => row.details[sid]?.submitted)
+                    return (
+                      <tr key={sid} className="border-t hover:bg-gray-50">
+                        <td className="p-3 font-medium">{s.name}</td>
+                        <td className="p-3 text-center text-gray-600">{studentsWithScores.length} / {broadsheet.students.length}</td>
+                        <td className="p-3 text-center">
+                          {anySubmitted ? (
+                            <span className="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2.5 py-1 rounded-full text-xs font-medium">
+                              <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                              Submitted
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full text-xs font-medium">
+                              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
+                              Not Submitted
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-center">
+                          <button onClick={() => setReopenModal({ show: true, subjectId: sid, subjectName: s.name })} disabled={reopening === sid || !anySubmitted}
+                            className={`px-4 py-1.5 rounded-lg text-xs font-medium transition ${anySubmitted ? 'bg-yellow-500 hover:bg-yellow-600 text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
+                            {reopening === sid ? 'Reopening...' : 'Reopen'}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {reopenModal.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setReopenModal({ show: false, subjectId: null, subjectName: '' })}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="text-center">
+              <div className="mx-auto w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 mb-2">Reopen Subject</h3>
+              <p className="text-sm text-gray-600 mb-1">Reopen <strong>{reopenModal.subjectName}</strong> for editing?</p>
+              <p className="text-sm text-yellow-700 bg-yellow-50 px-3 py-2 rounded-lg mb-5">The subject teacher will be able to modify scores and resubmit.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setReopenModal({ show: false, subjectId: null, subjectName: '' })}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                  Cancel
+                </button>
+                <button onClick={handleReopenSubject}
+                  className="flex-1 px-4 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg text-sm font-semibold transition">
+                  Reopen
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -877,5 +999,6 @@ export default function FormTeacherDashboard() {
         </div>
       )}
     </div>
+    </>
   )
 }

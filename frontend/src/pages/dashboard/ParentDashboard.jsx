@@ -135,13 +135,13 @@ export default function ParentDashboard() {
         <select value={selectedSession} onChange={(e) => setSelectedSession(e.target.value)}
           className="w-full sm:w-auto px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
           <option value="">All Sessions</option>
-          {sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {sessions.map((s) => <option key={s._id || s.id} value={s._id || s.id}>{s.name}</option>)}
         </select>
         <select value={selectedTerm} onChange={(e) => setSelectedTerm(e.target.value)}
           className="w-full sm:w-auto px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
           <option value="">All Terms</option>
           {sessions.filter(s => !selectedSession || s.id === selectedSession).flatMap(s => s.terms).map((t) => (
-            <option key={t.id} value={t.id}>{t.name}</option>
+            <option key={t._id || t.id} value={t._id || t.id}>{t.name}</option>
           ))}
         </select>
       </div>

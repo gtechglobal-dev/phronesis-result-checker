@@ -99,7 +99,7 @@ export default function Signup() {
               <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}
                 className="w-1/2 px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
                 <option value="">All Classes</option>
-                {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {classes.map((c) => <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>)}
               </select>
               <input type="text" placeholder="Search student name..." value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}

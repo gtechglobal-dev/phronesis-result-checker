@@ -1,10 +1,12 @@
 const { ResultPin } = require('../models')
 const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 
+const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
 function generatePin() {
   let pin = ''
-  for (let i = 0; i < 10; i++) {
-    pin += Math.floor(Math.random() * 10).toString()
+  for (let i = 0; i < 8; i++) {
+    pin += CHARS[Math.floor(Math.random() * CHARS.length)]
   }
   return pin
 }

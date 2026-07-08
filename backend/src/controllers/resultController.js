@@ -154,15 +154,23 @@ exports.checkByRegNo = async (req, res) => {
     if (!isString(regNo) || !isString(pin) || !isString(sessionId) || !isString(termId)) {
       return res.status(400).json({ message: 'Missing required fields' })
     }
-    if (!/^\d{10}$/.test(pin)) {
+    if (!/^[A-Z0-9]{8}$/i.test(pin)) {
       return res.status(400).json({ message: 'Invalid PIN format' })
     }
 
     const student = await Student.findOne({ regNo: regNo.trim().toUpperCase() }).populate('class')
     if (!student) return res.status(404).json({ message: 'Student not found' })
 
-    const pinRecord = await ResultPin.findOne({ pin })
+    const pinRecord = await ResultPin.findOne({ pin: pin.toUpperCase() })
     if (!pinRecord || !pinRecord.isActive) return res.status(401).json({ message: 'Invalid or expired PIN' })
+
+    const trimmedRegNo = regNo.trim().toUpperCase()
+
+    const differentRegNo = pinRecord.usedBy.find(u => u.regNo !== trimmedRegNo)
+    if (differentRegNo) {
+      return res.status(401).json({ message: 'This PIN has already been used by another student' })
+    }
+
     if (pinRecord.usedCount >= pinRecord.maxUses) {
       await ResultPin.findByIdAndUpdate(pinRecord._id, { isActive: false })
       return res.status(401).json({ message: 'PIN has expired (max uses reached)' })
@@ -170,9 +178,9 @@ exports.checkByRegNo = async (req, res) => {
 
     await ResultPin.findByIdAndUpdate(pinRecord._id, {
       $inc: { usedCount: 1 },
-      $push: { usedBy: { regNo: regNo.trim().toUpperCase(), usedAt: new Date() } },
+      $push: { usedBy: { regNo: trimmedRegNo, usedAt: new Date() } },
     })
-    try { emitToRole('EXAM_OFFICER', 'pin:used', { pin: pinRecord.pin, regNo: regNo.trim().toUpperCase() }) } catch (e) {}
+    try { emitToRole('EXAM_OFFICER', 'pin:used', { pin: pinRecord.pin, regNo: trimmedRegNo }) } catch (e) {}
 
     const result = await Result.findOne({ student: student._id, session: sessionId, term: termId })
       .populate({

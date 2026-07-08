@@ -41,7 +41,7 @@ exports.getBroadsheet = async (req, res) => {
       for (const sub of classSubjects) {
         const detail = result?.details.find(d => d.subject._id.toString() === sub._id.toString())
         if (detail) {
-          details[sub._id] = { ca1: detail.ca1, ca2: detail.ca2, exam: detail.exam, total: detail.total, grade: detail.grade, remark: detail.remark }
+          details[sub._id] = { ca1: detail.ca1, ca2: detail.ca2, exam: detail.exam, total: detail.total, grade: detail.grade, remark: detail.remark, submitted: detail.submitted }
           totalScore += detail.total
           subjectCount++
         } else {
@@ -122,6 +122,29 @@ exports.updateAttendance = async (req, res) => {
     }
     res.json({ message: 'Attendance saved' })
     try { emitBroadcast('entity:updated', { type: 'attendance' }) } catch (e) {}
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
+  }
+}
+
+exports.reopenSubject = async (req, res) => {
+  try {
+    const { sessionId, termId, subjectId } = req.body
+    if (!sessionId || !termId || !subjectId) return res.status(400).json({ message: 'Missing required fields' })
+
+    const classTeacher = await ClassTeacher.findOne({ user: req.user.id }).populate('class')
+    if (!classTeacher) return res.status(403).json({ message: 'Not assigned as form teacher' })
+
+    const results = await Result.find({ class: classTeacher.class._id, session: sessionId, term: termId }).select('_id')
+    const resultIds = results.map(r => r._id)
+
+    await ResultDetail.updateMany(
+      { result: { $in: resultIds }, subject: subjectId },
+      { $set: { submitted: false } }
+    )
+
+    res.json({ message: 'Subject reopened for editing' })
+    try { emitBroadcast('entity:updated', { type: 'subjectSubmission', sessionId, termId, classId: classTeacher.class._id, subjectId }) } catch (e) {}
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }

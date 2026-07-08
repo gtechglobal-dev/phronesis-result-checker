@@ -37,6 +37,10 @@ exports.getClassSubjects = async (req, res) => {
 exports.createSubject = async (req, res) => {
   try {
     const { name, classId } = req.body
+    const existing = await Subject.findOne({ name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' }, class: classId })
+    if (existing) {
+      return res.status(400).json({ message: 'Subject already exists in this class' })
+    }
     const subject = await Subject.create({ name, class: classId })
     res.status(201).json(subject)
     try { emitBroadcast('entity:updated', { type: 'subject' }) } catch (e) {}

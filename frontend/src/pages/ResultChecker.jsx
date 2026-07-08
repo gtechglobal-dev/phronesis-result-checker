@@ -79,7 +79,7 @@ export default function ResultChecker() {
                 onChange={(e) => setSessionId(e.target.value)}
                 className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm">
                 <option value="">Select Year</option>
-                {sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {sessions.map((s) => <option key={s._id || s.id} value={s._id || s.id}>{s.name}</option>)}
               </select>
             </div>
             <div>
@@ -89,7 +89,7 @@ export default function ResultChecker() {
                 className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm">
                 <option value="">Select Term</option>
                 {sessions.filter(s => sessionId === s.id).flatMap(s => s.terms).map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                  <option key={t._id || t.id} value={t._id || t.id}>{t.name}</option>
                 ))}
               </select>
             </div>
@@ -99,8 +99,9 @@ export default function ResultChecker() {
             <input
               type="password"
               required
+              maxLength={8}
               value={pin}
-              onChange={(e) => setPin(e.target.value)}
+              onChange={(e) => setPin(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
               className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] focus:border-transparent outline-none text-sm"
               placeholder="Enter your PIN"
             />

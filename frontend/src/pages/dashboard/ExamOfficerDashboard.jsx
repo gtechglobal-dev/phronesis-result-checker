@@ -365,13 +365,21 @@ export default function ExamOfficerDashboard() {
   const [generatedPins, setGeneratedPins] = useState([]);
   const [showAllPins, setShowAllPins] = useState(false);
   const [showAllPinHistory, setShowAllPinHistory] = useState(false);
+  const [pinMessage, setPinMessage] = useState(null);
+  useEffect(() => {
+    if (pinMessage) {
+      const t = setTimeout(() => setPinMessage(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [pinMessage]);
   const handleGeneratePin = async (e) => {
     e.preventDefault();
     setPinLoading(true);
     setGeneratedPins([]);
+    setPinMessage(null);
     try {
       const res = await pinAPI.generate({ count: pinCount });
-      setMessage({ type: "success", text: `${res.data.pins.length} PIN(s) generated` });
+      setPinMessage({ type: "success", text: `${res.data.pins.length} PIN(s) generated` });
       setGeneratedPins(res.data.pins);
       setShowAllPins(false);
       setPinCount(1);
@@ -388,13 +396,15 @@ export default function ExamOfficerDashboard() {
 
   const copyPin = (pin) => {
     navigator.clipboard.writeText(pin);
-    setMessage({ type: "success", text: "PIN copied to clipboard" });
+    setGeneratedPins(prev => prev.filter(p => p.pin !== pin));
+    setPinMessage({ type: "success", text: "PIN copied to clipboard" });
   };
 
   const copyAllPins = () => {
     const text = generatedPins.map((p) => p.pin).join("\n");
     navigator.clipboard.writeText(text);
-    setMessage({ type: "success", text: "All PINs copied to clipboard" });
+    setGeneratedPins([]);
+    setPinMessage({ type: "success", text: "All PINs copied to clipboard" });
   };
 
   useEffect(() => {
@@ -406,6 +416,8 @@ export default function ExamOfficerDashboard() {
   }, [activeTab]);
 
   return (
+    <>
+    <style>{`@keyframes fadeInUp{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}`}</style>
     <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
       <div className="mb-6 sm:mb-8">
         <h1 className="text-xl sm:text-2xl font-bold text-[#1B5E20]">
@@ -430,12 +442,12 @@ export default function ExamOfficerDashboard() {
         </div>
       )}
 
-      <div className="flex flex-nowrap gap-1.5 sm:gap-2 mb-6 overflow-x-auto pb-1">
+      <div className="flex flex-nowrap gap-2 mb-6 overflow-x-auto pb-1">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
-            className={`shrink-0 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium transition whitespace-nowrap ${
+            className={`shrink-0 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition whitespace-nowrap ${
               activeTab === t.id
                 ? "bg-[#1B5E20] text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -1090,12 +1102,12 @@ export default function ExamOfficerDashboard() {
                 await classAPI.create(classRegForm);
                 setClassRegForm({ name: "", level: "PRIMARY" });
                 loadClasses();
-              } catch (err) {
-                setMessage({
-                  type: "error",
-                  text: err.response?.data?.message || "Error",
-                });
-              } finally {
+    } catch (err) {
+      setPinMessage({
+        type: "error",
+        text: err.response?.data?.message || "Server error",
+      });
+    } finally {
                 setClassRegLoading(false);
               }
             }}
@@ -1241,10 +1253,15 @@ export default function ExamOfficerDashboard() {
                       await classAPI.createSubject(subjectRegForm);
                       setSubjectRegForm({ name: "", classId: subjectRegForm.classId });
                       setSubjectSearch("");
-                      const res = await classAPI.getSubjects(subjectRegForm.classId);
-                      setRegClassSubjects(res.data);
+                      setMessage({ type: "success", text: "Subject added successfully" });
+                      try {
+                        const res = await classAPI.getSubjects(subjectRegForm.classId);
+                        setRegClassSubjects(res.data);
+                      } catch (refreshErr) {
+                        console.error("Failed to refresh subjects list", refreshErr);
+                      }
                     } catch (err) {
-                      setMessage({ type: "error", text: err.response?.data?.message || "Error" });
+                      setMessage({ type: "error", text: err.response?.data?.message || "Error adding subject" });
                     } finally {
                       setSubjectRegLoading(false);
                     }
@@ -1273,21 +1290,26 @@ export default function ExamOfficerDashboard() {
                         <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                           {filtered.map(s => (
                             <button type="button" key={s}
-                              onClick={async () => {
-                                setShowSubjectDropdown(false);
-                                setSubjectRegLoading(true);
-                                try {
-                                  await classAPI.createSubject({ name: s, classId: subjectRegForm.classId });
-                                  setSubjectRegForm({ name: "", classId: subjectRegForm.classId });
-                                  setSubjectSearch("");
-                                  const res = await classAPI.getSubjects(subjectRegForm.classId);
-                                  setRegClassSubjects(res.data);
-                                } catch (err) {
-                                  setMessage({ type: "error", text: err.response?.data?.message || "Error adding subject" });
-                                } finally {
-                                  setSubjectRegLoading(false);
-                                }
-                              }}
+                                onClick={async () => {
+                                  setShowSubjectDropdown(false);
+                                  setSubjectRegLoading(true);
+                                  try {
+                                    await classAPI.createSubject({ name: s, classId: subjectRegForm.classId });
+                                    setSubjectRegForm({ name: "", classId: subjectRegForm.classId });
+                                    setSubjectSearch("");
+                                    setMessage({ type: "success", text: "Subject added successfully" });
+                                    try {
+                                      const res = await classAPI.getSubjects(subjectRegForm.classId);
+                                      setRegClassSubjects(res.data);
+                                    } catch (refreshErr) {
+                                      console.error("Failed to refresh subjects list", refreshErr);
+                                    }
+                                  } catch (err) {
+                                    setMessage({ type: "error", text: err.response?.data?.message || "Error adding subject" });
+                                  } finally {
+                                    setSubjectRegLoading(false);
+                                  }
+                                }}
                               className="w-full text-left px-4 py-2 text-sm hover:bg-blue-50 hover:text-blue-700 transition-colors"
                             >
                               {s}
@@ -1343,9 +1365,10 @@ export default function ExamOfficerDashboard() {
                         names,
                         classId: subjectRegForm.classId,
                       });
-                      setMessage(
-                        `${res.data.count} subject(s) added`,
-                      );
+                      setMessage({
+                        type: "success",
+                        text: `${res.data.count} subject(s) added`,
+                      });
                       setBulkSubjectsText("");
                       const subjectsRes = await classAPI.getSubjects(
                         subjectRegForm.classId,
@@ -1400,6 +1423,7 @@ export default function ExamOfficerDashboard() {
                         if (!confirm(`Delete subject "${s.name}"?`)) return;
                         try {
                           await classAPI.deleteSubject(s._id);
+                          setMessage({ type: "success", text: "Subject removed" });
                           const res = await classAPI.getSubjects(
                             subjectRegForm.classId,
                           );
@@ -1493,7 +1517,7 @@ export default function ExamOfficerDashboard() {
                 >
                   <option value="">Assign Class</option>
                   {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
+                    <option key={c._id || c.id} value={c._id || c.id}>
                       {c.name}
                     </option>
                   ))}
@@ -1559,7 +1583,7 @@ export default function ExamOfficerDashboard() {
             >
               <option value="">All Classes</option>
               {classes.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c._id || c.id} value={c._id || c.id}>
                   {c.name}
                 </option>
               ))}
@@ -1686,7 +1710,7 @@ export default function ExamOfficerDashboard() {
             >
               <option value="">Select Class</option>
               {classes.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c._id || c.id} value={c._id || c.id}>
                   {c.name}
                 </option>
               ))}
@@ -1876,15 +1900,12 @@ export default function ExamOfficerDashboard() {
                     <th className="text-left p-2 sm:p-3 font-medium text-gray-600">
                       PIN
                     </th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
-                      Used
-                    </th>
-                    <th className="text-left p-2 sm:p-3 font-medium text-gray-600">
-                      Used By
-                    </th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
-                      Status
-                    </th>
+                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
+                        Used
+                      </th>
+                      <th className="text-left p-2 sm:p-3 font-medium text-gray-600">
+                        Used By
+                      </th>
                     <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
                       Action
                     </th>
@@ -1896,7 +1917,7 @@ export default function ExamOfficerDashboard() {
                       <td className="p-2 sm:p-3 font-mono font-bold flex items-center gap-2">
                         <span>{p.pin}</span>
                         <button
-                          onClick={() => { navigator.clipboard.writeText(p.pin); setMessage({ type: 'success', text: 'PIN copied to clipboard' }) }}
+                          onClick={() => { navigator.clipboard.writeText(p.pin); setPinMessage({ type: 'success', text: 'PIN copied to clipboard' }) }}
                           className="text-yellow-600 hover:text-yellow-700 p-0.5 shrink-0"
                           title="Copy PIN"
                         >
@@ -1908,15 +1929,10 @@ export default function ExamOfficerDashboard() {
                       <td className="p-2 sm:p-3 text-center">
                         {p.usedCount}/{p.maxUses}
                       </td>
-                      <td className="p-2 sm:p-3 text-left text-[10px] sm:text-xs text-gray-600 max-w-[140px] truncate" title={p.usedBy?.length > 0 ? p.usedBy[p.usedBy.length - 1].regNo : ''}>
-                        {p.usedBy?.length > 0 ? p.usedBy[p.usedBy.length - 1].regNo : '—'}
-                      </td>
-                      <td className="p-2 sm:p-3 text-center">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] sm:text-xs font-bold ${p.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
-                        >
-                          {p.isActive ? "Active" : "Expired"}
-                        </span>
+                      <td className="p-2 sm:p-3 text-left text-[10px] sm:text-xs text-gray-600 max-w-[200px]" title={p.usedBy?.map(u => u.regNo).join(', ')}>
+                        {p.usedBy?.length > 0
+                          ? [...new Set(p.usedBy.map(u => u.regNo))].join(', ')
+                          : '—'}
                       </td>
                       <td className="p-2 sm:p-3 text-center">
                         <button
@@ -1925,9 +1941,9 @@ export default function ExamOfficerDashboard() {
                             try {
                               await pinAPI.deletePin(p._id || p.id);
                               loadPins();
-                              setMessage({ type: 'success', text: 'PIN deleted' });
+                              setPinMessage({ type: 'success', text: 'PIN deleted' });
                             } catch (err) {
-                              setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to delete PIN' });
+                              setPinMessage({ type: 'error', text: err.response?.data?.message || 'Failed to delete PIN' });
                             }
                           }}
                           className="text-[10px] sm:text-xs px-2 sm:px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-medium transition"
@@ -1939,7 +1955,7 @@ export default function ExamOfficerDashboard() {
                   ))}
                   {pinList.length > 2 && (
                     <tr>
-                      <td colSpan="5" className="text-center">
+                      <td colSpan="4" className="text-center">
                         <button
                           onClick={() => setShowAllPinHistory(!showAllPinHistory)}
                           className="text-xs text-yellow-600 hover:text-yellow-700 font-medium py-2 transition w-full"
@@ -1963,8 +1979,23 @@ export default function ExamOfficerDashboard() {
         </div>
       )}
 
+      {pinMessage && (
+        <div className="fixed bottom-12 sm:bottom-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg shadow-lg text-xs sm:text-sm font-medium flex items-center gap-2 pointer-events-auto"
+          style={{ animation: 'fadeInUp 0.3s ease-out' }}
+          style={{ backgroundColor: pinMessage.type === "error" ? "#FEE2E2" : "#D1FAE5", border: `1px solid ${pinMessage.type === "error" ? "#FCA5A5" : "#6EE7B7"}`, color: pinMessage.type === "error" ? "#991B1B" : "#065F46" }}
+        >
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {pinMessage.type === "error"
+              ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            }
+          </svg>
+          <span>{pinMessage.text}</span>
+        </div>
+      )}
 
     </div>
+    </>
   );
 }
 

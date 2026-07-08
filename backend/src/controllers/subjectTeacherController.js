@@ -33,7 +33,7 @@ exports.getScores = async (req, res) => {
       }
     }
 
-    res.json({ students, scores: scoreMap, submitted: results.some(r => r.status === 'SUBMITTED') })
+    res.json({ students, scores: scoreMap, submitted: results.some(r => r.details.some(d => d.submitted)) })
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
@@ -49,14 +49,16 @@ exports.saveScores = async (req, res) => {
       return res.status(400).json({ message: 'Invalid scores data' })
     }
 
-    const existingSubmitted = await Result.findOne({ class: classId, session: sessionId, term: termId, status: 'SUBMITTED' })
-    if (existingSubmitted) return res.status(400).json({ message: 'Scores already submitted. Cannot modify.' })
+    const resultIds = (await Result.find({ class: classId, session: sessionId, term: termId }).select('_id')).map(r => r._id)
+    const existingSubmitted = await ResultDetail.findOne({ result: { $in: resultIds }, subject: subjectId, submitted: true })
+    if (existingSubmitted) return res.status(400).json({ message: 'Scores already submitted for this subject. Cannot modify.' })
 
     for (const item of scores) {
       let result = await Result.findOne({ student: item.studentId, session: sessionId, term: termId })
 
       if (result) {
-        if (result.status === 'SUBMITTED') continue
+        const existingDetail = await ResultDetail.findOne({ result: result._id, subject: subjectId })
+        if (existingDetail?.submitted) continue
         await ResultDetail.findOneAndUpdate(
           { result: result._id, subject: subjectId },
           {
@@ -96,7 +98,7 @@ exports.saveScores = async (req, res) => {
     }
 
     res.json({ message: 'Scores saved' })
-    try { emitToRole('EXAM_OFFICER', 'scores:saved', { sessionId, termId, classId, subjectId }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
+    try { emitToRole('EXAM_OFFICER', 'scores:saved', { sessionId, termId, classId, subjectId }); emitToRole('FORM_TEACHER', 'scores:saved', { sessionId, termId, classId, subjectId }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
@@ -115,13 +117,13 @@ exports.submitScores = async (req, res) => {
     if (!results.length) return res.status(400).json({ message: 'No scores to submit' })
 
     for (const r of results) {
-      const hasSubject = r.details.some(d => d.subject._id.toString() === subjectId)
-      if (!hasSubject) continue
-      await Result.findByIdAndUpdate(r._id, { status: 'SUBMITTED' })
+      const detail = r.details.find(d => d.subject._id.toString() === subjectId)
+      if (!detail) continue
+      await ResultDetail.findByIdAndUpdate(detail._id, { submitted: true })
     }
 
     res.json({ message: 'Scores submitted successfully' })
-    try { emitToRole('EXAM_OFFICER', 'scores:submitted', { sessionId, termId, classId, subjectId }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
+    try { emitToRole('EXAM_OFFICER', 'scores:submitted', { sessionId, termId, classId, subjectId }); emitToRole('FORM_TEACHER', 'scores:submitted', { sessionId, termId, classId, subjectId }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }

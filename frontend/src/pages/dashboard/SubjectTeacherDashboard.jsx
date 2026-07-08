@@ -14,6 +14,9 @@ export default function SubjectTeacherDashboard() {
   const [message, setMessage] = useState({ type: '', text: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [submitSuccess, setSubmitSuccess] = useState(false)
   const [selectedSession, setSelectedSession] = useState('')
   const [selectedTerm, setSelectedTerm] = useState('')
   const [selectedTermName, setSelectedTermName] = useState('')
@@ -37,11 +40,11 @@ export default function SubjectTeacherDashboard() {
         setSessions(sessRes.data)
         if (sessRes.data.length) {
           const current = sessRes.data.find(s => s.isCurrent) || sessRes.data[0]
-          setSelectedSession(current.id)
+          setSelectedSession(current._id || current.id)
           setSelectedSessionName(current.name)
           if (current.terms?.length) {
             const t = current.terms.find(t => t.isCurrent) || current.terms[0]
-            setSelectedTerm(t.id)
+            setSelectedTerm(t._id || t.id)
             setSelectedTermName(t.name)
           }
         }
@@ -56,19 +59,47 @@ export default function SubjectTeacherDashboard() {
 
   useEffect(() => {
     if (!selectedClassId) { setSubjects([]); return }
-    classAPI.getSubjects(selectedClassId).then(res => setSubjects(res.data)).catch(() => {})
+    classAPI.getSubjects(selectedClassId).then(res => setSubjects(Array.isArray(res.data) ? res.data : [])).catch(err => {
+      console.error('Failed to load subjects:', err?.response?.data || err.message)
+    })
   }, [selectedClassId])
 
   useEffect(() => {
-    if (!selectedClassId || !selectedSubjectId || !selectedSession || !selectedTerm) return
+    if (!selectedClassId || !selectedSubjectId || !selectedSession || !selectedTerm) {
+      console.log('loadScores skip:', { selectedClassId, selectedSubjectId, selectedSession, selectedTerm })
+      return
+    }
     loadScores()
   }, [selectedClassId, selectedSubjectId, selectedSession, selectedTerm])
+
+  const refreshClasses = useCallback(() => {
+    classAPI.getAll().then(res => setClasses(res.data)).catch(() => {})
+  }, [])
+
+  const refreshSubjects = useCallback(() => {
+    if (!selectedClassId) { setSubjects([]); return }
+    classAPI.getSubjects(selectedClassId).then(res => setSubjects(Array.isArray(res.data) ? res.data : [])).catch(err => {
+      console.error('refreshSubjects error:', err?.response?.data || err.message)
+    })
+  }, [selectedClassId])
 
   const refreshScores = useCallback(() => {
     if (selectedClassId && selectedSubjectId && selectedSession && selectedTerm) loadScores()
   }, [selectedClassId, selectedSubjectId, selectedSession, selectedTerm])
 
-  useSocketListener('entity:updated', refreshScores)
+  const handleEntityUpdated = useCallback((data) => {
+    if (data?.type === 'class') refreshClasses()
+    if (data?.type === 'subject' || data?.type === 'subjectAssignment') refreshSubjects()
+    if (!data?.type || data?.type === 'result') refreshScores()
+    if (data?.type === 'subjectSubmission') {
+      if (data.subjectId === selectedSubjectId && data.classId === selectedClassId) {
+        showMessage('success', 'Subject reopened by form teacher. You can now edit scores.')
+        refreshScores()
+      }
+    }
+  }, [refreshClasses, refreshSubjects, refreshScores, selectedSubjectId, selectedClassId])
+
+  useSocketListener('entity:updated', handleEntityUpdated)
   useSocketListener('scores:saved', refreshScores)
   useSocketListener('scores:submitted', refreshScores)
 
@@ -81,10 +112,12 @@ export default function SubjectTeacherDashboard() {
         classId: selectedClassId,
         subjectId: selectedSubjectId
       })
+      console.log('loadScores response:', { students: res.data.students?.length, scores: res.data.scores, submitted: res.data.submitted })
       setStudents(res.data.students || [])
       setScores(res.data.scores || {})
       setSubmitted(res.data.submitted || false)
-    } catch {
+    } catch (err) {
+      console.error('loadScores error:', err?.response?.data || err.message)
       showMessage('error', 'Failed to load scores')
     } finally {
       setLoading(false)
@@ -103,12 +136,14 @@ export default function SubjectTeacherDashboard() {
     timerRef.current = setTimeout(() => {
       const pending = pendingSaveRef.current
       if (!pending) return
-      const scoresArr = students.map(s => ({
-        studentId: s.id,
-        ca1: pending[s.id]?.ca1 || 0,
-        ca2: pending[s.id]?.ca2 || 0,
-        exam: pending[s.id]?.exam || 0
-      }))
+      const scoresArr = students
+        .filter(s => pending[s._id || s.id] != null)
+        .map(s => ({
+          studentId: s._id || s.id,
+          ca1: pending[s._id || s.id]?.ca1 || 0,
+          ca2: pending[s._id || s.id]?.ca2 || 0,
+          exam: pending[s._id || s.id]?.exam || 0
+        }))
       setSaving(true)
       subjectTeacherAPI.saveScores({
         sessionId: selectedSession,
@@ -121,13 +156,13 @@ export default function SubjectTeacherDashboard() {
       }).catch((err) => {
         showMessage('error', err.response?.data?.message || 'Error saving scores')
       }).finally(() => setSaving(false))
-    }, 1500)
+    }, 100)
   }, [scores, students, submitted, selectedSession, selectedTerm, selectedClassId, selectedSubjectId])
 
-  const handleSubmit = async () => {
-    if (!window.confirm('Submit scores? This action cannot be undone.')) return
+  const confirmSubmit = async () => {
+    setShowConfirm(false)
     try {
-      setSaving(true)
+      setSubmitting(true)
       await subjectTeacherAPI.submitScores({
         sessionId: selectedSession,
         termId: selectedTerm,
@@ -135,11 +170,12 @@ export default function SubjectTeacherDashboard() {
         subjectId: selectedSubjectId
       })
       setSubmitted(true)
-      showMessage('success', 'Scores submitted successfully')
+      setSubmitSuccess(true)
+      setTimeout(() => setSubmitSuccess(false), 4000)
     } catch (err) {
       showMessage('error', err.response?.data?.message || 'Error submitting scores')
     } finally {
-      setSaving(false)
+      setSubmitting(false)
     }
   }
 
@@ -167,13 +203,6 @@ export default function SubjectTeacherDashboard() {
         </div>
       )}
 
-      {saving && (
-        <div className="mb-4 px-4 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm flex items-center gap-2">
-          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-700" />
-          Saving...
-        </div>
-      )}
-
       <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
           <div>
@@ -193,7 +222,7 @@ export default function SubjectTeacherDashboard() {
             <select value={selectedClassId} onChange={(e) => { setSelectedClassId(e.target.value); setSelectedSubjectId('') }}
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm">
               <option value="">Select Class</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {classes.map(c => <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
@@ -201,7 +230,7 @@ export default function SubjectTeacherDashboard() {
             <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)}
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" disabled={!selectedClassId}>
               <option value="">Select Subject</option>
-              {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {subjects.map(s => <option key={s._id || s.id} value={s._id || s.id}>{s.name}</option>)}
             </select>
           </div>
         </div>
@@ -210,17 +239,17 @@ export default function SubjectTeacherDashboard() {
           <p className="text-gray-400 text-center py-8">Select a class and subject to begin.</p>
         ) : submitted ? (
           <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg mb-6 text-sm font-medium">
-            Scores already submitted. Cannot make further changes.
+            Scores already submitted. Cannot make further changes. Contact the Form Teacher.
           </div>
         ) : students.length > 0 ? (
           <>
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[calc(100vh-320px)] border border-gray-200 rounded-lg">
               <table className="w-full text-xs sm:text-sm min-w-[700px]">
-                <thead>
-                  <tr className="bg-gray-50">
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-12">S/N</th>
-                    <th className="text-left p-2 sm:p-3 font-medium text-gray-600">Student Name</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Reg No</th>
+                <thead className="sticky top-0 z-20 bg-gray-50">
+                  <tr>
+                    <th className="sticky left-0 z-30 bg-gray-50 text-center p-2 sm:p-3 font-medium text-gray-600 w-12 min-w-[48px]">S/N</th>
+                    <th className="sticky left-[48px] z-30 bg-gray-50 text-left p-2 sm:p-3 font-medium text-gray-600 min-w-[160px]">Student Name</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Exam No</th>
                     <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">CA1 (20)</th>
                     <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">CA2 (20)</th>
                     <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">EXAM (60)</th>
@@ -229,27 +258,28 @@ export default function SubjectTeacherDashboard() {
                 </thead>
                 <tbody>
                   {students.map((student, idx) => {
-                    const form = scores[student.id] || {}
+                    const sid = student._id || student.id
+                    const form = scores[sid] || {}
                     return (
-                      <tr key={student.id} className="border-t hover:bg-gray-50">
-                        <td className="text-center p-2 sm:p-3 text-gray-500">{idx + 1}</td>
-                        <td className="p-2 sm:p-3 font-medium whitespace-nowrap">{student.firstName} {student.lastName}</td>
+                      <tr key={sid} className="border-t hover:bg-gray-50 group">
+                        <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 text-center p-2 sm:p-3 text-gray-500">{idx + 1}</td>
+                        <td className="sticky left-[48px] z-10 bg-white group-hover:bg-gray-50 p-2 sm:p-3 font-medium whitespace-nowrap">{student.lastName} {student.firstName}</td>
                         <td className="text-center p-2 sm:p-3 text-gray-500 text-xs">{student.regNo}</td>
                         <td className="p-2 sm:p-3 text-center">
-                          <input type="number" min="0" max="20" value={form.ca1 ?? ''}
-                            onChange={(e) => updateScore(student.id, 'ca1', e.target.value)}
+                          <input type="number" min="0" max="20" value={form.ca1 || ''}
+                            onChange={(e) => updateScore(sid, 'ca1', e.target.value)}
                             disabled={submitted}
                             className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
                         </td>
                         <td className="p-2 sm:p-3 text-center">
-                          <input type="number" min="0" max="20" value={form.ca2 ?? ''}
-                            onChange={(e) => updateScore(student.id, 'ca2', e.target.value)}
+                          <input type="number" min="0" max="20" value={form.ca2 || ''}
+                            onChange={(e) => updateScore(sid, 'ca2', e.target.value)}
                             disabled={submitted}
                             className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
                         </td>
                         <td className="p-2 sm:p-3 text-center">
-                          <input type="number" min="0" max="60" value={form.exam ?? ''}
-                            onChange={(e) => updateScore(student.id, 'exam', e.target.value)}
+                          <input type="number" min="0" max="60" value={form.exam || ''}
+                            onChange={(e) => updateScore(sid, 'exam', e.target.value)}
                             disabled={submitted}
                             className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
                         </td>
@@ -260,25 +290,69 @@ export default function SubjectTeacherDashboard() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-gray-50 font-bold">
-                    <td className="p-2 sm:p-3" colSpan="3"></td>
-                    <td className="p-2 sm:p-3 text-center text-xs text-gray-500">Max 20</td>
-                    <td className="p-2 sm:p-3 text-center text-xs text-gray-500">Max 20</td>
-                    <td className="p-2 sm:p-3 text-center text-xs text-gray-500">Max 70</td>
-                    <td className="p-2 sm:p-3 text-center text-xs text-gray-500">Max 110</td>
+                    <td className="sticky left-0 z-10 bg-gray-50 p-2 sm:p-3" colSpan="2"></td>
+                    <td className="p-2 sm:p-3 text-center text-xs text-gray-500" colSpan="5">Max: CA1=20, CA2=20, EXAM=60, Total=100</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
             <div className="mt-6 flex justify-center gap-4">
-              <button onClick={handleSubmit} disabled={saving}
+              <button onClick={() => setShowConfirm(true)} disabled={saving || submitting}
                 className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white px-8 py-2.5 rounded-lg font-semibold transition disabled:opacity-50 text-sm">
-                {saving ? 'Submitting...' : 'Submit Scores'}
+                {submitting ? 'Submitting...' : saving ? 'Saving...' : 'Submit to Form Teacher'}
               </button>
             </div>
           </>
         ) : (
           <p className="text-yellow-600 text-sm text-center py-4">No students found in this class.</p>
         )}
+
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowConfirm(false)}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="text-center">
+              <div className="mx-auto w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 mb-2">Confirm Submission</h3>
+              <p className="text-sm text-gray-600 mb-1">You are about to submit scores for <strong>{subjects.find(s => (s._id || s.id) === selectedSubjectId)?.name || selectedSubjectId}</strong> to the Form Teacher.</p>
+              <p className="text-sm text-red-600 font-semibold mb-6">Scores cannot be modified after submission.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setShowConfirm(false)}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                  Cancel
+                </button>
+                <button onClick={confirmSubmit}
+                  className="flex-1 px-4 py-2.5 bg-[#1B5E20] hover:bg-[#2E7D32] text-white rounded-lg text-sm font-semibold transition">
+                  Confirm Submit
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {submitting && !showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#1B5E20]" />
+            <p className="text-sm font-medium text-gray-700">Submitting scores...</p>
+          </div>
+        </div>
+      )}
+
+      {submitSuccess && (
+        <div className="fixed bottom-12 sm:bottom-16 left-1/2 -translate-x-1/2 z-50 animate-[fadeInUp_0.3s_ease-out]">
+          <div className="bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium">
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Scores submitted successfully
+          </div>
+        </div>
+      )}
       </div>
     </div>
   )

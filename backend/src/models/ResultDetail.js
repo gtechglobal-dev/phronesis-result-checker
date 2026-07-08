@@ -9,6 +9,7 @@ const ResultDetailSchema = new mongoose.Schema({
   total: { type: Number, default: 0 },
   grade: { type: String, default: 'F' },
   remark: { type: String, default: 'Fail' },
+  submitted: { type: Boolean, default: false },
 }, { timestamps: true })
 
 ResultDetailSchema.index({ result: 1, subject: 1 }, { unique: true })
