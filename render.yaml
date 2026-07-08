@@ -15,6 +15,14 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: https://phronesis-frontend.onrender.com
+      - key: ADMIN_USERNAMES
+        value: Admin1,Admin2,Admin3
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SUBJECT_TEACHER_PASSWORD
+        sync: false
 
   - type: static
     name: phronesis-frontend
