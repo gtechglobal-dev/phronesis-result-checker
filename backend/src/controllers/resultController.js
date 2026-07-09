@@ -199,12 +199,6 @@ exports.checkByRegNo = async (req, res) => {
       return res.status(401).json({ message: 'PIN has expired (max uses reached)' })
     }
 
-    await ResultPin.findByIdAndUpdate(pinRecord._id, {
-      $inc: { usedCount: 1 },
-      $push: { usedBy: { regNo: trimmedRegNo, usedAt: new Date() } },
-    })
-    try { emitToRole('EXAM_OFFICER', 'pin:used', { pin: pinRecord.pin, regNo: trimmedRegNo }) } catch (e) {}
-
     const result = await Result.findOne({ student: student._id, session: sessionId, term: termId })
       .populate({
         path: 'details',
@@ -218,6 +212,12 @@ exports.checkByRegNo = async (req, res) => {
       const reason = result.withholdReason || 'Result withheld. Please contact the school.'
       return res.json({ withheld: true, message: reason, student, result: null })
     }
+
+    await ResultPin.findByIdAndUpdate(pinRecord._id, {
+      $inc: { usedCount: 1 },
+      $push: { usedBy: { regNo: trimmedRegNo, usedAt: new Date() } },
+    })
+    try { emitToRole('EXAM_OFFICER', 'pin:used', { pin: pinRecord.pin, regNo: trimmedRegNo }) } catch (e) {}
 
     const termData = await Term.findById(termId)
     res.json({
