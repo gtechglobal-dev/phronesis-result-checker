@@ -863,7 +863,7 @@ export default function FormTeacherDashboard() {
                             const maxD = Number(daysOpen) || Infinity;
                             const num = val === '' ? '' : Math.min(Math.max(0, Number(val)), maxD);
                             const absent = (num !== '' && maxD < Infinity) ? String(maxD - num) : '';
-                            setAttendanceData(prev => ({ ...prev, [row.student.id]: { ...prev[row.student.id], present: val, absent } }))
+                            setAttendanceData(prev => ({ ...prev, [row.student.id]: { ...prev[row.student.id], present: num, absent } }))
                           }}
                           className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm" placeholder="-" />
                       </td>
