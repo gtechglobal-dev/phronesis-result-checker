@@ -223,7 +223,7 @@ exports.checkByRegNo = async (req, res) => {
     res.json({
       student,
       result: {
-        ...result.toObject(),
+        ...result.toJSON(),
         daysOpen: termData?.daysOpen,
         nextResumptionDate: termData?.nextResumptionDate
       }
