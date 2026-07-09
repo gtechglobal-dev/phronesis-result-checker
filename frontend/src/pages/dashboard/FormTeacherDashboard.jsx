@@ -480,7 +480,8 @@ export default function FormTeacherDashboard() {
             <td>${row.student.gender || '-'}</td>
             ${subjects.map(s => {
               const d = row.details[s._id || s.id]
-              return d ? `<td>${d.ca1}</td><td>${d.ca2}</td><td>${d.exam}</td><td class="total">${d.total}</td>`
+              const sv = (v) => d && d.submitted ? v : (v || '-')
+              return d ? `<td>${sv(d.ca1)}</td><td>${sv(d.ca2)}</td><td>${sv(d.exam)}</td><td class="total">${sv(d.total)}</td>`
                 : '<td>-</td><td>-</td><td>-</td><td>-</td>'
             }).join('')}
             <td class="total">${row.totalScore}</td>
@@ -564,7 +565,8 @@ export default function FormTeacherDashboard() {
       x += colW
       broadsheet.subjects.forEach(s => {
         const d = row.details[s._id || s.id]
-        const vals = d ? [d.ca1, d.ca2, d.exam, d.total] : ['-', '-', '-', '-']
+        const sv = (v) => d && d.submitted ? v : (v || '-')
+        const vals = d ? [sv(d.ca1), sv(d.ca2), sv(d.exam), sv(d.total)] : ['-', '-', '-', '-']
         vals.forEach(v => {
           pdf.text(String(v), x + colW / 2, y, { align: 'center' })
           pdf.rect(x, y - 5, colW, rowH)
@@ -597,7 +599,8 @@ export default function FormTeacherDashboard() {
       broadsheet.subjects.forEach(s => {
         const d = row.details[s._id || s.id]
         if (d) {
-          rowData.push(d.ca1, d.ca2, d.exam, d.total)
+          const sv = (v) => d.submitted ? v : (v || '-')
+          rowData.push(sv(d.ca1), sv(d.ca2), sv(d.exam), sv(d.total))
         } else {
           rowData.push('-', '-', '-', '-')
         }
@@ -736,12 +739,14 @@ export default function FormTeacherDashboard() {
                       <td className="p-2 text-center font-bold">{row.student.gender || '-'}</td>
                       {broadsheet.subjects.map(s => {
                         const d = row.details[s._id || s.id]
+                        const showVal = (v) => d.submitted ? v : (v || '-')
+                        const showTotal = (v) => d.submitted ? v : (v || '-')
                         return d ? (
                           <Fragment key={s._id || s.id}>
-                            <td className="p-1 text-center">{d.ca1}</td>
-                            <td className="p-1 text-center">{d.ca2}</td>
-                            <td className="p-1 text-center">{d.exam}</td>
-                            <td className={`p-1 text-center font-bold border-r border-gray-300 ${d.total >= 80 ? 'text-green-700' : d.total >= 60 ? 'text-blue-700' : 'text-red-700'}`}>{d.total}</td>
+                            <td className="p-1 text-center">{showVal(d.ca1)}</td>
+                            <td className="p-1 text-center">{showVal(d.ca2)}</td>
+                            <td className="p-1 text-center">{showVal(d.exam)}</td>
+                            <td className={`p-1 text-center font-bold border-r border-gray-300 ${d.total >= 80 ? 'text-green-700' : d.total >= 60 ? 'text-blue-700' : 'text-red-700'}`}>{showTotal(d.total)}</td>
                           </Fragment>
                         ) : (
                           <Fragment key={s._id || s.id}>

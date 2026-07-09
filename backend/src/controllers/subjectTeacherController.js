@@ -116,29 +116,29 @@ exports.submitScores = async (req, res) => {
     }
 
     const students = await Student.find({ class: classId, session: sessionId }).select('_id')
-    const results = await Result.find({ class: classId, session: sessionId, term: termId })
-      .populate('student')
-      .populate({ path: 'details', match: { subject: subjectId } })
+    const results = await Result.find({ class: classId, session: sessionId, term: termId }).select('_id student')
+
+    const resultIds = results.map(r => r._id)
+
+    const existingDetails = await ResultDetail.find({ result: { $in: resultIds }, subject: subjectId })
+    const detailByResult = new Map()
+    for (const d of existingDetails) {
+      detailByResult.set(d.result.toString(), d)
+    }
 
     const sidToResult = new Map()
     for (const r of results) {
       if (!r.student) continue
-      const sid = r.student._id.toString()
-      const existing = sidToResult.get(sid)
-      if (!existing || (r.details.length > 0 && !existing.details.length)) {
-        sidToResult.set(sid, r)
-      }
+      sidToResult.set(r.student.toString(), r)
     }
 
     const resultBulks = []
     const detailBulks = []
-    let created = 0, marked = 0, createdDetail = 0
 
     for (const student of students) {
       const sid = student._id.toString()
       const result = sidToResult.get(sid)
       if (!result) {
-        created++
         const tempId = new mongoose.Types.ObjectId()
         resultBulks.push({
           insertOne: {
@@ -157,9 +157,8 @@ exports.submitScores = async (req, res) => {
           }
         })
       } else {
-        const detail = result.details.find(d => d.subject._id.toString() === subjectId)
+        const detail = detailByResult.get(result._id.toString())
         if (detail) {
-          marked++
           detailBulks.push({
             updateOne: {
               filter: { _id: detail._id },
@@ -167,7 +166,6 @@ exports.submitScores = async (req, res) => {
             }
           })
         } else {
-          createdDetail++
           detailBulks.push({
             insertOne: {
               document: {

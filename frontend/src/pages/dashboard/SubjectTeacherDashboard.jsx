@@ -21,6 +21,7 @@ export default function SubjectTeacherDashboard() {
   const [selectedTerm, setSelectedTerm] = useState('')
   const [selectedTermName, setSelectedTermName] = useState('')
   const [selectedSessionName, setSelectedSessionName] = useState('')
+  const [saveStatus, setSaveStatus] = useState('')
   const timerRef = useRef(null)
   const pendingSaveRef = useRef(null)
   const dirtyRef = useRef(false)
@@ -127,19 +128,47 @@ export default function SubjectTeacherDashboard() {
     }
   }
 
+  const getEmptyScores = useCallback(() => {
+    const empty = []
+    for (const student of students) {
+      const sid = student._id || student.id
+      const form = scores[sid] || {}
+      const ca1 = form.ca1
+      const ca2 = form.ca2
+      const exam = form.exam
+      if (ca1 == null || ca1 === '' || (ca1 === 0 && !form._ca1Touched) ||
+          ca2 == null || ca2 === '' || (ca2 === 0 && !form._ca2Touched) ||
+          exam == null || exam === '' || (exam === 0 && !form._examTouched)) {
+        empty.push({ id: sid, name: `${student.lastName} ${student.firstName}`, ca1, ca2, exam })
+      }
+    }
+    return empty
+  }, [students, scores])
+
   const updateScore = useCallback((studentId, field, value) => {
     if (submitted) return
     const max = field === 'exam' ? 60 : field === 'ca1' || field === 'ca2' ? 20 : 0
-    const val = Math.min(Math.max(parseInt(value) || 0, 0), max)
-    const updated = { ...scores, [studentId]: { ...(scores[studentId] || {}), [field]: val } }
+    const raw = value === '' ? '' : value
+    const val = raw === '' ? '' : Math.min(Math.max(parseInt(raw) || 0, 0), max)
+    const touchField = `_${field}Touched`
+    const updated = {
+      ...scores,
+      [studentId]: {
+        ...(scores[studentId] || {}),
+        [field]: val === '' ? 0 : val,
+        [touchField]: true
+      }
+    }
     setScores(updated)
 
     if (timerRef.current) clearTimeout(timerRef.current)
     pendingSaveRef.current = updated
     dirtyRef.current = true
+    setSaveStatus('')
     timerRef.current = setTimeout(() => {
       const pending = pendingSaveRef.current
       if (!pending) return
+      setSaveStatus('saving')
       const scoresArr = students
         .filter(s => pending[s._id || s.id] != null)
         .map(s => ({
@@ -156,8 +185,13 @@ export default function SubjectTeacherDashboard() {
         scores: scoresArr
       }).then(() => {
         dirtyRef.current = false
-      }).catch(() => {})
-    }, 300)
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus(''), 2000)
+      }).catch((err) => {
+        console.error('Auto-save failed:', err?.response?.data || err.message)
+        setSaveStatus('error')
+      })
+    }, 500)
   }, [scores, students, submitted, selectedSession, selectedTerm, selectedClassId, selectedSubjectId])
 
   const confirmSubmit = async () => {
@@ -178,13 +212,17 @@ export default function SubjectTeacherDashboard() {
               exam: pending[s._id || s.id]?.exam || 0
             }))
           if (scoresArr.length) {
-            await subjectTeacherAPI.saveScores({
-              sessionId: selectedSession,
-              termId: selectedTerm,
-              classId: selectedClassId,
-              subjectId: selectedSubjectId,
-              scores: scoresArr
-            })
+            try {
+              await subjectTeacherAPI.saveScores({
+                sessionId: selectedSession,
+                termId: selectedTerm,
+                classId: selectedClassId,
+                subjectId: selectedSubjectId,
+                scores: scoresArr
+              })
+            } catch (saveErr) {
+              console.error('Save before submit failed:', saveErr?.response?.data || saveErr.message)
+            }
           }
         }
         dirtyRef.current = false
@@ -356,28 +394,31 @@ export default function SubjectTeacherDashboard() {
                   {students.map((student, idx) => {
                     const sid = student._id || student.id
                     const form = scores[sid] || {}
+                    const ca1Empty = form.ca1 == null || form.ca1 === ''
+                    const ca2Empty = form.ca2 == null || form.ca2 === ''
+                    const examEmpty = form.exam == null || form.exam === ''
                     return (
                       <tr key={sid} className="border-t hover:bg-gray-50 group">
                         <td className="sm:sticky sm:left-0 sm:z-10 bg-white group-hover:bg-gray-50 text-center p-2 sm:p-3 text-gray-500">{idx + 1}</td>
                         <td className="sm:sticky sm:left-[48px] sm:z-10 bg-white group-hover:bg-gray-50 p-2 sm:p-3 font-medium">{student.lastName} {student.firstName}</td>
                         <td className="text-center p-2 sm:p-3 text-gray-500 text-xs">{student.regNo}</td>
                         <td className="p-2 sm:p-3 text-center">
-                          <input type="number" min="0" max="20" value={form.ca1 || ''}
+                          <input type="number" min="0" max="20" value={form.ca1 === 0 || form.ca1 == null || form.ca1 === '' ? '' : form.ca1}
                             onChange={(e) => updateScore(sid, 'ca1', e.target.value)}
                             disabled={submitted}
-                            className="w-14 sm:w-16 px-1.5 sm:px-2 py-1.5 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
+                            className={`w-14 sm:w-16 px-1.5 sm:px-2 py-1.5 border rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed ${ca1Empty && !submitted ? 'border-orange-300 bg-orange-50' : 'border-gray-300'}`} />
                         </td>
                         <td className="p-2 sm:p-3 text-center">
-                          <input type="number" min="0" max="20" value={form.ca2 || ''}
+                          <input type="number" min="0" max="20" value={form.ca2 === 0 || form.ca2 == null || form.ca2 === '' ? '' : form.ca2}
                             onChange={(e) => updateScore(sid, 'ca2', e.target.value)}
                             disabled={submitted}
-                            className="w-14 sm:w-16 px-1.5 sm:px-2 py-1.5 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
+                            className={`w-14 sm:w-16 px-1.5 sm:px-2 py-1.5 border rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed ${ca2Empty && !submitted ? 'border-orange-300 bg-orange-50' : 'border-gray-300'}`} />
                         </td>
                         <td className="p-2 sm:p-3 text-center">
-                          <input type="number" min="0" max="60" value={form.exam || ''}
+                          <input type="number" min="0" max="60" value={form.exam === 0 || form.exam == null || form.exam === '' ? '' : form.exam}
                             onChange={(e) => updateScore(sid, 'exam', e.target.value)}
                             disabled={submitted}
-                            className="w-14 sm:w-16 px-1.5 sm:px-2 py-1.5 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
+                            className={`w-14 sm:w-16 px-1.5 sm:px-2 py-1.5 border rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed ${examEmpty && !submitted ? 'border-orange-300 bg-orange-50' : 'border-gray-300'}`} />
                         </td>
                         <td className="p-2 sm:p-3 text-center font-bold">{getTotal(form)}</td>
                       </tr>
@@ -392,43 +433,111 @@ export default function SubjectTeacherDashboard() {
                 </tfoot>
               </table>
             </div>
-            <div className="mt-6 flex justify-center gap-4">
-              <button onClick={() => setShowConfirm(true)} disabled={saving || submitting}
-                className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white px-8 py-2.5 rounded-lg font-semibold transition disabled:opacity-50 text-sm">
-                {submitting ? 'Submitting...' : saving ? 'Saving...' : 'Submit to Form Teacher'}
-              </button>
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <div className="flex items-center gap-3">
+                {saveStatus === 'saving' && (
+                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                    <span className="animate-spin inline-block w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full" />
+                    Saving...
+                  </span>
+                )}
+                {saveStatus === 'saved' && (
+                  <span className="text-xs text-green-600 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    Saved
+                  </span>
+                )}
+                {saveStatus === 'error' && (
+                  <span className="text-xs text-red-600 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    Save failed
+                  </span>
+                )}
+                <button onClick={() => setShowConfirm(true)} disabled={saving || submitting}
+                  className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white px-8 py-2.5 rounded-lg font-semibold transition disabled:opacity-50 text-sm">
+                  {submitting ? 'Submitting...' : saving ? 'Saving...' : 'Submit to Form Teacher'}
+                </button>
+              </div>
+              {dirtyRef.current && saveStatus !== 'saving' && (
+                <p className="text-xs text-amber-600">You have unsaved changes. They will auto-save shortly.</p>
+              )}
             </div>
           </>
         ) : (
           <p className="text-yellow-600 text-sm text-center py-4">No students found in this class.</p>
         )}
 
-      {showConfirm && (
+      {showConfirm && (() => {
+        const emptyScores = getEmptyScores()
+        const hasEmpty = emptyScores.length > 0
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowConfirm(false)}>
-          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-6 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="text-center">
-              <div className="mx-auto w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
-                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+              <div className={`mx-auto w-12 h-12 ${hasEmpty ? 'bg-red-100' : 'bg-yellow-100'} rounded-full flex items-center justify-center mb-4`}>
+                {hasEmpty ? (
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
               </div>
               <h3 className="text-lg font-bold text-gray-800 mb-2">Confirm Submission</h3>
               <p className="text-sm text-gray-600 mb-1">You are about to submit scores for <strong>{subjects.find(s => (s._id || s.id) === selectedSubjectId)?.name || selectedSubjectId}</strong> to the Form Teacher.</p>
-              <p className="text-sm text-red-600 font-semibold mb-6">Scores cannot be modified after submission.</p>
+              
+              {hasEmpty && (
+                <div className="mt-3 mb-3 text-left bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-sm font-semibold text-red-700 mb-2">The following students have missing scores (will be submitted as 0):</p>
+                  <div className="max-h-40 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-red-600 border-b border-red-200">
+                          <th className="py-1 text-left font-medium">Student</th>
+                          <th className="py-1 text-center font-medium">CA1</th>
+                          <th className="py-1 text-center font-medium">CA2</th>
+                          <th className="py-1 text-center font-medium">EXAM</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {emptyScores.map(s => (
+                          <tr key={s.id} className="border-b border-red-100 last:border-0">
+                            <td className="py-1 text-red-800">{s.name}</td>
+                            <td className={`py-1 text-center font-medium ${(s.ca1 == null || s.ca1 === '') ? 'text-red-600' : 'text-gray-500'}`}>
+                              {s.ca1 == null || s.ca1 === '' ? '-' : s.ca1}
+                            </td>
+                            <td className={`py-1 text-center font-medium ${(s.ca2 == null || s.ca2 === '') ? 'text-red-600' : 'text-gray-500'}`}>
+                              {s.ca2 == null || s.ca2 === '' ? '-' : s.ca2}
+                            </td>
+                            <td className={`py-1 text-center font-medium ${(s.exam == null || s.exam === '') ? 'text-red-600' : 'text-gray-500'}`}>
+                              {s.exam == null || s.exam === '' ? '-' : s.exam}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-sm text-red-600 font-semibold mb-4">Scores cannot be modified after submission.</p>
               <div className="flex gap-3">
                 <button onClick={() => setShowConfirm(false)}
                   className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
-                  Cancel
+                  {hasEmpty ? 'Go Back & Fix' : 'Cancel'}
                 </button>
                 <button onClick={confirmSubmit}
-                  className="flex-1 px-4 py-2.5 bg-[#1B5E20] hover:bg-[#2E7D32] text-white rounded-lg text-sm font-semibold transition">
-                  Confirm Submit
+                  className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold text-white transition ${hasEmpty ? 'bg-red-600 hover:bg-red-700' : 'bg-[#1B5E20] hover:bg-[#2E7D32]'}`}>
+                  {hasEmpty ? 'Submit Anyway' : 'Confirm Submit'}
                 </button>
               </div>
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {submitSuccess && (
         <div className="fixed bottom-12 sm:bottom-16 left-1/2 -translate-x-1/2 z-50 animate-[fadeInUp_0.3s_ease-out]">

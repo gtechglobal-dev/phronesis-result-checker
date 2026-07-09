@@ -1,5 +1,6 @@
 require('dotenv').config()
 const express = require('express')
+const path = require('path')
 const cors = require('cors')
 const helmet = require('helmet')
 const mongoSanitize = require('express-mongo-sanitize')
@@ -20,7 +21,7 @@ const app = express()
 
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000').split(',').map(s => s.trim())
 
-app.use(helmet())
+app.use(helmet({ contentSecurityPolicy: false }))
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) return callback(null, true)
@@ -47,6 +48,12 @@ app.use('/api/pins', pinRoutes)
 app.use('/api/subject-assignments', subjectAssignmentRoutes)
 app.use('/api/subject-teacher', subjectTeacherRoutes)
 app.use('/api/form-teacher', formTeacherRoutes)
+
+const frontendPath = path.join(__dirname, '..', '..', 'frontend', 'dist')
+app.use(express.static(frontendPath))
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendPath, 'index.html'))
+})
 
 app.use((err, req, res, next) => {
   console.error(err.stack)
