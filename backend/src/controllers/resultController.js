@@ -277,8 +277,8 @@ exports.getPendingBroadsheet = async (req, res) => {
     const classRecord = await Class.findById(classId)
     if (!classRecord) return res.status(404).json({ message: 'Class not found' })
 
-    const classSubjects = await Subject.find({ class: classId }).sort({ createdAt: 1 })
-    const students = await Student.find({ class: classId }).sort({ lastName: 1 })
+    const classSubjects = await Subject.find({ class: classId, session: sessionId }).sort({ createdAt: 1 })
+    const students = await Student.find({ class: classId, session: sessionId }).sort({ lastName: 1 })
 
     const results = await Result.find({ class: classId, session: sessionId, term: termId, status: 'SUBMITTED' })
       .populate('student')
@@ -518,8 +518,8 @@ exports.getArchiveBroadsheet = async (req, res) => {
     const classRecord = await Class.findById(classId)
     if (!classRecord) return res.status(404).json({ message: 'Class not found' })
 
-    const classSubjects = await Subject.find({ class: classId }).sort({ createdAt: 1 })
-    const students = await Student.find({ class: classId }).sort({ lastName: 1 })
+    const classSubjects = await Subject.find({ class: classId, session: sessionId }).sort({ createdAt: 1 })
+    const students = await Student.find({ class: classId, session: sessionId }).sort({ lastName: 1 })
 
     const results = await Result.find({ class: classId, session: sessionId, term: termId })
       .populate('student')

@@ -19,8 +19,8 @@ exports.getBroadsheet = async (req, res) => {
     if (!classTeacher) return res.status(403).json({ message: 'Not assigned as form teacher' })
 
     const classRecord = classTeacher.class
-    const classSubjects = await Subject.find({ class: classRecord._id }).sort({ createdAt: 1 })
-    const students = await Student.find({ class: classRecord._id }).sort({ lastName: 1 })
+    const classSubjects = await Subject.find({ class: classRecord._id, session: sessionId }).sort({ createdAt: 1 })
+    const students = await Student.find({ class: classRecord._id, session: sessionId }).sort({ lastName: 1 })
 
     const results = await Result.find({ class: classRecord._id, session: sessionId, term: termId })
       .populate('student')

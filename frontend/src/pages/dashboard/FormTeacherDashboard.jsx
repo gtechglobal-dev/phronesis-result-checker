@@ -5,6 +5,31 @@ import { classAPI, studentAPI, formTeacherAPI } from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
 import { useSocketListener } from '../../context/SocketContext'
 
+const getClassSortOrder = (name) => {
+  const n = (name || '').toLowerCase().trim()
+  if (n.startsWith('montesorri') || n.startsWith('montessori')) return 1
+  if (n.startsWith('nursery')) return 2
+  if (n.startsWith('basic')) {
+    const num = parseInt(n.match(/\d+/)?.[0] || '1')
+    if (num <= 2) return 2 + num
+    return 4 + (num - 2)
+  }
+  if (n.startsWith('jss')) {
+    const num = parseInt(n.match(/\d+/)?.[0] || '1')
+    const isB = n.includes('b')
+    return 9 + (num - 1) * 2 + (isB ? 1 : 0)
+  }
+  if (n.startsWith('sss')) {
+    const num = parseInt(n.match(/\d+/)?.[0] || '1')
+    if (num === 1) return n.includes('b') ? 16 : 15
+    if (num === 2) return 17
+    if (num === 3) return 18
+    return 14 + num
+  }
+  if (n.startsWith('graduat')) return 19
+  return 99
+}
+
 export default function FormTeacherDashboard() {
   const { user } = useAuth()
   const [myClass, setMyClass] = useState(null)
@@ -27,17 +52,68 @@ export default function FormTeacherDashboard() {
   const [editStudentId, setEditStudentId] = useState(null)
   const [editName, setEditName] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState({ show: false, student: null })
+  const [transferStudents, setTransferStudents] = useState([])
+  const [selectedTransfer, setSelectedTransfer] = useState(new Set())
+  const [transferLoading, setTransferLoading] = useState(false)
+  const [transferring, setTransferring] = useState(false)
+  const [showTransferConfirm, setShowTransferConfirm] = useState(false)
+  const [prevSessionId, setPrevSessionId] = useState('')
+  const [transferMessage, setTransferMessage] = useState(null)
+  const [availableClasses, setAvailableClasses] = useState([])
+  const [transferTargetClassId, setTransferTargetClassId] = useState('')
+  const [showAllTransfer, setShowAllTransfer] = useState(false)
+
+  useEffect(() => {
+    if (transferMessage) {
+      const t = setTimeout(() => setTransferMessage(null), 4000)
+      return () => clearTimeout(t)
+    }
+  }, [transferMessage])
+
+  const loadTransferSources = useCallback(async () => {
+    if (!myClass || !sessions.length || !selectedSession) return
+    const classId = myClass.id || myClass._id
+    const idx = sessions.findIndex(s => (s._id || s.id) === selectedSession)
+    if (idx < 0 || idx >= sessions.length - 1) { setPrevSessionId(''); setTransferStudents([]); return }
+    const prev = sessions[idx + 1]
+    setPrevSessionId(prev._id || prev.id)
+    setTransferLoading(true)
+    try {
+      const [prevRes, currRes] = await Promise.all([
+        studentAPI.getAll({ classId, sessionId: prev._id || prev.id }),
+        studentAPI.getAll({ sessionId: selectedSession })
+      ])
+      const prevList = Array.isArray(prevRes.data) ? prevRes.data : []
+      const currRegNos = new Set(
+        (Array.isArray(currRes.data) ? currRes.data : []).map(s => s.regNo)
+      )
+      setTransferStudents(prevList.map(s => ({
+        ...s,
+        alreadyTransferred: currRegNos.has(s.regNo)
+      })))
+    } catch { setTransferStudents([]) }
+    setTransferLoading(false)
+  }, [myClass, sessions, selectedSession])
+
+  useEffect(() => {
+    if (myClass && availableClasses.length) {
+      const currentOrder = getClassSortOrder(myClass.name)
+      const next = availableClasses.find(c => getClassSortOrder(c.name) > currentOrder)
+      setTransferTargetClassId(next ? (next._id || next.id) : '')
+    }
+  }, [myClass, availableClasses])
+
   const loadStudentList = useCallback(async () => {
     if (!myClass) return
     try {
       const classId = myClass.id || myClass._id
       if (!classId) return
-      const res = await studentAPI.getAll({ classId })
+      const res = await studentAPI.getAll({ classId, sessionId: selectedSession })
       setStudentList(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
       console.error('loadStudentList error:', err?.response?.data || err.message)
     }
-  }, [myClass])
+  }, [myClass, selectedSession])
 
   const [daysOpen, setDaysOpen] = useState('')
   const [nextResDate, setNextResDate] = useState('')
@@ -57,6 +133,7 @@ export default function FormTeacherDashboard() {
     { id: 'attendance', label: 'Attendance' },
     { id: 'subjectReview', label: 'Subject Review' },
     { id: 'students', label: 'Students' },
+    { id: 'transfer', label: 'Transfer Students' },
     { id: 'submit', label: 'Submit' }
   ]
 
@@ -68,12 +145,14 @@ export default function FormTeacherDashboard() {
   useEffect(() => {
     const init = async () => {
       try {
-        const [assignRes, sessRes] = await Promise.all([
+        const [assignRes, sessRes, clsRes] = await Promise.all([
           classAPI.getMyAssignment(),
-          classAPI.getSessions()
+          classAPI.getSessions(),
+          classAPI.getAll()
         ])
         if (assignRes.data.class) setMyClass(assignRes.data.class)
         setSessions(sessRes.data)
+        setAvailableClasses((Array.isArray(clsRes.data) ? clsRes.data : []).sort((a, b) => getClassSortOrder(a.name) - getClassSortOrder(b.name)))
         if (sessRes.data.length) {
           const curr = sessRes.data.find(s => s.isCurrent) || sessRes.data[0]
           setSelectedSession(curr._id || curr.id)
@@ -87,6 +166,8 @@ export default function FormTeacherDashboard() {
     }
     init()
   }, [])
+
+  useEffect(() => { loadTransferSources() }, [loadTransferSources])
 
   const handleGenderToggle = async (student) => {
     const next = student.gender === 'M' ? 'F' : 'M'
@@ -223,6 +304,10 @@ export default function FormTeacherDashboard() {
   const handleCreateStudent = async (e) => {
     e.preventDefault()
     if (!myClass) return
+    if (!selectedSession) {
+      showMessage('error', 'Please select a session first')
+      return
+    }
 
     const names = studentForm.names.split(',').map(s => s.trim()).filter(Boolean)
     if (!names.length) {
@@ -239,7 +324,7 @@ export default function FormTeacherDashboard() {
 
     setStudentLoading(true)
     try {
-      await studentAPI.bulkCreate({ students })
+      await studentAPI.bulkCreate({ students, sessionId: selectedSession })
       showMessage('success', `${students.length} student(s) created`)
       setStudentForm({ names: '' })
       await loadStudentList()
@@ -544,7 +629,13 @@ export default function FormTeacherDashboard() {
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-[#1B5E20]">Form Teacher Dashboard</h1>
         <p className="text-gray-500 text-sm mt-1">
-          {myClass ? <span className="text-yellow-600 font-medium">Class: {myClass.name}</span> : 'Loading class...'}
+          {myClass ? (
+            <>
+              <span className="text-yellow-600 font-medium">Class: {myClass.name}</span>
+              <span className="text-gray-400 mx-2">|</span>
+              <span className="text-gray-600">Teacher: {user?.firstName} {user?.lastName}</span>
+            </>
+          ) : 'Loading class...'}
         </p>
       </div>
 
@@ -572,8 +663,8 @@ export default function FormTeacherDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Session</label>
-          <select value={selectedSession} onChange={(e) => setSelectedSession(e.target.value)}
-            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm">
+          <select value={selectedSession} disabled
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-gray-100 cursor-not-allowed">
             {sessions.map(s => <option key={s._id || s.id} value={s.id || s._id}>{s.name}</option>)}
           </select>
         </div>
@@ -632,7 +723,13 @@ export default function FormTeacherDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {broadsheet.students.map((row, i) => (
+                  {broadsheet.students.length === 0 ? (
+                    <tr>
+                      <td colSpan={7 + broadsheet.subjects.length * 4} className="text-center py-12 text-gray-400">
+                        No students transferred yet. Use the <button onClick={() => setActiveTab('transfer')} className="text-[#1B5E20] underline font-medium">Transfer Students</button> tab to carry forward students.
+                      </td>
+                    </tr>
+                  ) : broadsheet.students.map((row, i) => (
                     <tr key={row.student.id} className={`border-t ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-yellow-50`}>
                       <td className="p-2 text-center font-bold sticky left-0 bg-inherit z-10">{i + 1}</td>
                       <td className="p-2 font-medium whitespace-nowrap sticky left-[30px] bg-inherit z-10">{row.student.lastName} {row.student.firstName}</td>
@@ -700,7 +797,10 @@ export default function FormTeacherDashboard() {
               </table>
             </div>
           ) : (
-            <p className="text-gray-400 text-center py-8">No data found. Select session and term.</p>
+            <div className="text-center py-8">
+              <p className="text-gray-400 mb-2">No students in this class for the current session.</p>
+              <p className="text-sm text-gray-500">Go to the <button onClick={() => setActiveTab('transfer')} className="text-[#1B5E20] underline hover:text-yellow-600 font-medium">Transfer Students</button> tab to carry forward students from the previous session.</p>
+            </div>
           )}
           {savingComment && <p className="text-xs text-blue-600 mt-2">Saving comment...</p>}
         </div>
@@ -1047,6 +1147,222 @@ export default function FormTeacherDashboard() {
           )}
         </div>
       )}
+      {activeTab === 'transfer' && (
+        <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
+          <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-2">Transfer Students</h3>
+
+          {!prevSessionId ? (
+            <p className="text-gray-400 text-center py-8">No previous session found to transfer from.</p>
+          ) : (
+            <>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-blue-800">
+                  Transferring students from <strong>{sessions.find(s => (s._id || s.id) === prevSessionId)?.name || 'previous session'}</strong>
+                  {' '}to <strong>{sessions.find(s => (s._id || s.id) === selectedSession)?.name || 'current session'}</strong>.
+                  Their names, exam numbers, and gender records will be carried forward into this session.
+                </p>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Transfer to Class</label>
+                <select value={transferTargetClassId}
+                  onChange={(e) => setTransferTargetClassId(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm">
+                  {(() => {
+                    const currentOrder = myClass ? getClassSortOrder(myClass.name) : 0
+                    return availableClasses
+                      .filter(c => getClassSortOrder(c.name) > currentOrder)
+                      .map(c => (
+                        <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
+                      ))
+                  })()}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Only higher classes are shown. The current class is excluded.</p>
+              </div>
+
+              {transferLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#1B5E20]" />
+                </div>
+              ) : transferStudents.length === 0 ? (
+                <p className="text-gray-400 text-center py-8">No students found in the previous session for this class.</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm text-gray-500">
+                      {transferStudents.filter(s => !s.alreadyTransferred).length} pending · {transferStudents.filter(s => s.alreadyTransferred).length} already transferred
+                    </p>
+                    <button onClick={() => setShowAllTransfer(v => !v)}
+                      className="text-xs text-[#1B5E20] hover:underline font-medium cursor-pointer">
+                      {showAllTransfer ? 'Show pending only' : 'Show all students'}
+                    </button>
+                  </div>
+                  {(() => {
+                    const visible = showAllTransfer ? transferStudents : transferStudents.filter(s => !s.alreadyTransferred)
+                    return (
+                      <div className="overflow-x-auto mb-4">
+                        <table className="w-full text-xs sm:text-sm">
+                          <thead>
+                            <tr className="bg-gray-50">
+                              <th className="p-2 text-center font-medium text-gray-600 w-10">
+                                <input type="checkbox"
+                                  checked={selectedTransfer.size > 0 && selectedTransfer.size === transferStudents.filter(s => !s.alreadyTransferred).length}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedTransfer(new Set(transferStudents.filter(s => !s.alreadyTransferred).map(s => s._id || s.id)))
+                                    } else {
+                                      setSelectedTransfer(new Set())
+                                    }
+                                  }}
+                                  className="w-4 h-4 rounded border-gray-300 text-[#1B5E20] focus:ring-[#1B5E20]" />
+                              </th>
+                              <th className="text-center p-2 font-medium text-gray-600 w-10">S/N</th>
+                              <th className="text-left p-2 font-medium text-gray-600">Student's Name</th>
+                              <th className="text-center p-2 font-medium text-gray-600 w-20">Gender</th>
+                              <th className="text-center p-2 font-medium text-gray-600">Exam No</th>
+                              <th className="text-center p-2 font-medium text-gray-600 w-24">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {visible.map((s, i) => {
+                              const sid = s._id || s.id
+                              const alreadyTransferred = s.alreadyTransferred
+                              return (
+                                <tr key={sid} className={`border-t hover:bg-gray-50 ${alreadyTransferred ? 'bg-green-50' : ''}`}>
+                                  <td className="p-2 text-center">
+                                    <input type="checkbox"
+                                      checked={selectedTransfer.has(sid)}
+                                      disabled={alreadyTransferred}
+                                      onChange={(e) => {
+                                        const next = new Set(selectedTransfer)
+                                        e.target.checked ? next.add(sid) : next.delete(sid)
+                                        setSelectedTransfer(next)
+                                      }}
+                                      className="w-4 h-4 rounded border-gray-300 text-[#1B5E20] focus:ring-[#1B5E20] disabled:opacity-50" />
+                                  </td>
+                                  <td className="p-2 text-center text-xs">{i + 1}</td>
+                                  <td className="p-2 font-medium whitespace-nowrap">{s.lastName} {s.firstName}</td>
+                                  <td className="p-2 text-center">{s.gender || '-'}</td>
+                                  <td className="p-2 text-center text-xs">{s.regNo}</td>
+                                  <td className="p-2 text-center">
+                                    {alreadyTransferred ? (
+                                      <span className="inline-flex items-center gap-1 text-green-700 bg-green-100 px-2.5 py-1 rounded-full text-xs font-medium">
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Transferred
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-400 text-xs">Pending</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )
+                  })()}
+
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-500">
+                      {selectedTransfer.size} of {transferStudents.filter(s => !s.alreadyTransferred).length} pending student(s) selected
+                    </p>
+                    <button onClick={() => {
+                      if (selectedTransfer.size === 0) {
+                        setTransferMessage({ type: 'error', text: 'Please select at least one student to transfer' })
+                        return
+                      }
+                      setShowTransferConfirm(true)
+                    }}
+                      disabled={selectedTransfer.size === 0 || transferring}
+                      className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white px-6 py-2.5 rounded-lg font-semibold transition disabled:opacity-50 text-sm">
+                      {transferring ? 'Transferring...' : 'Transfer Selected'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {transferMessage && (
+            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-[fadeInUp_0.3s_ease-out]">
+              <div className={`px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium ${transferMessage.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+                <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {transferMessage.type === 'success'
+                    ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  }
+                </svg>
+                {transferMessage.text}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showTransferConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowTransferConfirm(false)}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="text-center">
+              <div className="mx-auto w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 mb-2">Confirm Transfer</h3>
+              <p className="text-sm text-gray-600 mb-3">
+                You are about to transfer <strong>{selectedTransfer.size}</strong> student(s) from{' '}
+                <strong>{sessions.find(s => (s._id || s.id) === prevSessionId)?.name || 'previous session'}</strong>{' '}
+                to <strong>{sessions.find(s => (s._id || s.id) === selectedSession)?.name || 'current session'}</strong>.
+              </p>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-5 text-left text-sm text-yellow-800">
+                <p className="font-medium mb-1">What will happen:</p>
+                <ul className="space-y-1 list-disc list-inside text-xs">
+                  <li>Each selected student's name, gender, and exam number will be carried forward</li>
+                  <li>They will be registered in the current session under your class</li>
+                  <li>Subject teachers will be able to enter scores for them</li>
+                  <li>The broadsheet will update to reflect the new students</li>
+                  <li>Students already transferred will not be duplicated</li>
+                </ul>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setShowTransferConfirm(false)}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+                  Cancel
+                </button>
+                <button onClick={async () => {
+                  setShowTransferConfirm(false)
+                  setTransferring(true)
+                  const studentIds = Array.from(selectedTransfer)
+                  const fromClassId = myClass?.id || myClass?._id
+                  const toClassId = transferTargetClassId
+                  try {
+                    await studentAPI.carryForward({
+                      fromSessionId: prevSessionId,
+                      toSessionId: selectedSession,
+                      classMappings: [{ fromClassId, toClassId, studentIds }]
+                    })
+                    setTransferMessage({ type: 'success', text: `${studentIds.length} student(s) transferred successfully` })
+                    setSelectedTransfer(new Set())
+                    loadTransferSources()
+                    loadBroadsheet(true)
+                  } catch (err) {
+                    setTransferMessage({ type: 'error', text: err.response?.data?.message || 'Error transferring students' })
+                  } finally {
+                    setTransferring(false)
+                  }
+                }}
+                  className="flex-1 px-4 py-2.5 bg-[#1B5E20] hover:bg-[#2E7D32] text-white rounded-lg text-sm font-semibold transition cursor-pointer">
+                  Confirm Transfer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {submitting && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/40">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mb-4"></div>

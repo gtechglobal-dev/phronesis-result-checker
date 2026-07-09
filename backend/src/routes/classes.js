@@ -63,4 +63,7 @@ router.post('/terms', auth, roleAuth('EXAM_OFFICER'), [
 router.delete('/sessions/:id', auth, roleAuth('EXAM_OFFICER'), classController.deleteSession)
 router.delete('/terms/:id', auth, roleAuth('EXAM_OFFICER'), classController.deleteTerm)
 
+router.post('/subjects/copy', auth, roleAuth('EXAM_OFFICER'), classController.copySubjectsFromSession)
+router.post('/sessions/reactivate', auth, roleAuth('EXAM_OFFICER'), classController.reactivateSession)
+
 module.exports = router

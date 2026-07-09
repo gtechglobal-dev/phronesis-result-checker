@@ -14,5 +14,6 @@ router.post('/bulk', protect, authorize('EXAM_OFFICER', 'FORM_TEACHER'), student
 router.put('/:id', protect, authorize('EXAM_OFFICER', 'FORM_TEACHER'), studentController.updateStudent)
 router.delete('/:id', protect, authorize('EXAM_OFFICER', 'FORM_TEACHER'), studentController.deleteStudent)
 router.post('/generate-exam-numbers', protect, authorize('EXAM_OFFICER', 'FORM_TEACHER'), studentController.generateExamNumbers)
+router.post('/carry-forward', protect, authorize('EXAM_OFFICER', 'FORM_TEACHER'), studentController.carryForwardStudents)
 
 module.exports = router

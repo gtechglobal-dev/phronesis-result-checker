@@ -55,8 +55,21 @@ export default function ResultChecker() {
         setResult(res.data.result)
       }
     } catch (err) {
-      const msg = err.response?.data?.message || 'Result not found. Please check your details and try again.'
-      setModal({ show: true, type: 'error', title: 'Result Not Found', message: msg })
+      const msg = err.response?.data?.message || 'An unexpected error occurred. Please try again.'
+      const status = err.response?.status
+      let title = 'Error'
+      if (msg.includes('PIN') || msg.includes('expired') || msg.includes('Invalid or expired')) {
+        title = 'PIN Error'
+      } else if (msg.includes('Student not found') || msg.includes('exam number')) {
+        title = 'Student Not Found'
+      } else if (msg.includes('Result not found')) {
+        title = 'Result Not Found'
+      } else if (status === 400) {
+        title = 'Invalid Input'
+      } else if (status === 401) {
+        title = 'Authentication Error'
+      }
+      setModal({ show: true, type: 'error', title, message: msg })
     } finally {
       setLoading(false)
     }
@@ -182,36 +195,55 @@ export default function ResultChecker() {
         {result && student && (
           <div className="mt-6 sm:mt-8 print-area" id="result-sheet">
             <div className="bg-white rounded-xl shadow-md p-5 sm:p-8 print:shadow-none print:p-4 print:rounded-none">
+
               <div className="text-center border-b-2 border-[#1B5E20] pb-4 mb-6 print:pb-3 print:mb-4">
                 <img src="/school logo.png" alt="Phronesis Int'l School" className="h-16 w-16 sm:h-20 sm:w-20 mx-auto mb-3 print:h-16 print:w-16" />
-                <h1 className="text-2xl sm:text-3xl font-bold text-[#1B5E20] tracking-tight">PHRONESIS INT'L SCHOOL</h1>
-                <p className="text-sm text-gray-500 mt-1">...Building a legacy of excellence</p>
-                <h2 className="text-lg sm:text-xl font-bold text-[#1B5E20] mt-2 uppercase tracking-wide">Result Sheet</h2>
+                <h1 className="text-xl sm:text-2xl font-bold text-[#1B5E20] tracking-tight">PHRONESIS INT'L SCHOOL</h1>
+                <p className="text-xs sm:text-sm text-gray-500 italic">...Building a legacy of excellence</p>
+                <h2 className="text-base sm:text-lg font-bold text-gray-800 mt-2 uppercase tracking-wide">Student's Result</h2>
               </div>
 
               <div className="mb-6 print:mb-4">
-                <table className="w-full text-sm">
+                <table className="w-full text-xs sm:text-sm">
                   <tbody>
-                    <tr><td className="py-1 font-semibold text-gray-700 w-40">Student Name:</td><td className="py-1 font-bold text-gray-900">{student.lastName} {student.firstName}</td></tr>
-                    <tr><td className="py-1 font-semibold text-gray-700">Exam No:</td><td className="py-1 font-bold text-gray-900">{student.regNo}</td></tr>
-                    <tr><td className="py-1 font-semibold text-gray-700">Class:</td><td className="py-1 font-bold text-gray-900">{result.class.name}</td></tr>
-                    <tr><td className="py-1 font-semibold text-gray-700">Term:</td><td className="py-1 font-bold text-gray-900">{result.session.name} - {result.term.name}</td></tr>
-                    <tr><td className="py-1 font-semibold text-gray-700">Position:</td><td className="py-1 font-bold text-gray-900">{result.position || '-'}{result.position ? getOrdinalSuffix(result.position) : ''}</td></tr>
-                    <tr><td className="py-1 font-semibold text-gray-700">Total Score:</td><td className="py-1 font-bold text-gray-900">{result.totalScore}</td></tr>
+                    <tr className="border-b border-gray-100">
+                      <td className="py-1.5 font-semibold text-gray-600 w-40">Name</td>
+                      <td className="py-1.5 font-bold text-gray-900">{student.lastName} {student.firstName}</td>
+                      <td className="py-1.5 font-semibold text-gray-600 w-40">Grand Total</td>
+                      <td className="py-1.5 font-bold text-gray-900">{result.totalScore}</td>
+                    </tr>
+                    <tr className="border-b border-gray-100">
+                      <td className="py-1.5 font-semibold text-gray-600">Class</td>
+                      <td className="py-1.5 font-bold text-gray-900">{result.class?.name}</td>
+                      <td className="py-1.5 font-semibold text-gray-600">Average</td>
+                      <td className="py-1.5 font-bold text-gray-900">{result.average ?? Math.round(result.totalScore / result.details.length)}</td>
+                    </tr>
+                    <tr className="border-b border-gray-100">
+                      <td className="py-1.5 font-semibold text-gray-600">Session</td>
+                      <td className="py-1.5 font-bold text-gray-900">{result.session?.name}</td>
+                      <td className="py-1.5 font-semibold text-gray-600">Position</td>
+                      <td className="py-1.5 font-bold text-gray-900">{result.position ? `${result.position}${getOrdinalSuffix(result.position)}` : '-'}</td>
+                    </tr>
+                    <tr className="border-b border-gray-100">
+                      <td className="py-1.5 font-semibold text-gray-600">Term</td>
+                      <td className="py-1.5 font-bold text-gray-900">{result.term?.name}</td>
+                      <td className="py-1.5 font-semibold text-gray-600">Exam No</td>
+                      <td className="py-1.5 font-bold text-gray-900">{student.regNo}</td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
 
-              <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-3 border-b border-gray-200 pb-2">RESULTS</h3>
+              <h3 className="font-bold text-sm sm:text-base text-[#1B5E20] mb-3 border-b border-gray-200 pb-2">Results</h3>
               <div className="overflow-x-auto mb-6">
                 <table className="w-full text-xs sm:text-sm border-collapse">
                   <thead>
                     <tr className="bg-[#1B5E20] text-white">
                       <th className="p-2 sm:p-3 text-center font-semibold w-10">S/N</th>
-                      <th className="p-2 sm:p-3 text-left font-semibold">SUBJECT</th>
-                      <th className="p-2 sm:p-3 text-center font-semibold">CA1 (20)</th>
-                      <th className="p-2 sm:p-3 text-center font-semibold">CA2 (20)</th>
-                      <th className="p-2 sm:p-3 text-center font-semibold">EXAM (60)</th>
+                      <th className="p-2 sm:p-3 text-left font-semibold">SUBJECTS</th>
+                      <th className="p-2 sm:p-3 text-center font-semibold">CA1</th>
+                      <th className="p-2 sm:p-3 text-center font-semibold">CA2</th>
+                      <th className="p-2 sm:p-3 text-center font-semibold">EXAM</th>
                       <th className="p-2 sm:p-3 text-center font-semibold">TOTAL</th>
                     </tr>
                   </thead>
@@ -219,7 +251,7 @@ export default function ResultChecker() {
                     {result.details.map((d, i) => (
                       <tr key={d.id} className={`border-b ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-yellow-50`}>
                         <td className="p-2 sm:p-3 text-center font-medium">{i + 1}</td>
-                        <td className="p-2 sm:p-3 font-medium">{d.subject.name}</td>
+                        <td className="p-2 sm:p-3 font-medium">{d.subject?.name}</td>
                         <td className="p-2 sm:p-3 text-center">{d.ca1}</td>
                         <td className="p-2 sm:p-3 text-center">{d.ca2}</td>
                         <td className="p-2 sm:p-3 text-center font-semibold">{d.exam}</td>
@@ -231,35 +263,35 @@ export default function ResultChecker() {
               </div>
 
               <div className="mb-6 print:mb-4">
-                <h4 className="font-bold text-sm text-[#1B5E20] mb-2">ATTENDANCE</h4>
                 <table className="w-full text-xs sm:text-sm">
                   <tbody>
-                    <tr><td className="py-1 text-gray-700 w-48">Number of Times School Opened:</td><td className="py-1 font-bold">{result.daysOpen ?? '-'}</td></tr>
-                    <tr><td className="py-1 text-gray-700">Number of Times Present:</td><td className="py-1 font-bold text-green-700">{result.daysPresent ?? '-'}</td></tr>
-                    <tr><td className="py-1 text-gray-700">Number of Times Absent:</td><td className="py-1 font-bold text-red-700">{result.daysAbsent ?? '-'}</td></tr>
+                    <tr><td className="py-1.5 text-gray-600 w-56">No of times school opened:</td><td className="py-1.5 font-bold text-gray-900">{result.daysOpen ?? '-'}</td></tr>
+                    <tr><td className="py-1.5 text-gray-600">No of days present:</td><td className="py-1.5 font-bold text-green-700">{result.daysPresent ?? '-'}</td></tr>
+                    <tr><td className="py-1.5 text-gray-600">No of days absent:</td><td className="py-1.5 font-bold text-red-700">{result.daysAbsent ?? '-'}</td></tr>
+                    <tr><td className="py-1.5 text-gray-600">Next resumption date:</td><td className="py-1.5 font-bold text-gray-900">{result.nextResumptionDate ? new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</td></tr>
                   </tbody>
                 </table>
               </div>
 
-              <div className="space-y-4 mb-6 print:mb-4">
+              <div className="space-y-3 mb-6 print:mb-4">
                 {result.teacherComment && (
-                  <div className="p-3 sm:p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                    <h4 className="font-semibold text-sm text-[#1B5E20] mb-1">Form Teacher's Remark</h4>
-                    <p className="text-gray-700 text-sm">{result.teacherComment}</p>
+                  <div>
+                    <h4 className="font-semibold text-xs sm:text-sm text-gray-700 mb-0.5">Form Teacher's Remark</h4>
+                    <p className="text-gray-900 text-xs sm:text-sm italic">{result.teacherComment}</p>
                   </div>
                 )}
                 {result.principalComment && (
-                  <div className="p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <h4 className="font-semibold text-sm text-[#1B5E20] mb-1">Principal's Remark</h4>
-                    <p className="text-gray-700 text-sm">{result.principalComment}</p>
+                  <div>
+                    <h4 className="font-semibold text-xs sm:text-sm text-gray-700 mb-0.5">Principal's Remark</h4>
+                    <p className="text-gray-900 text-xs sm:text-sm italic">{result.principalComment}</p>
                   </div>
                 )}
-                {result.nextResumptionDate && (
-                  <div className="p-3 sm:p-4 bg-green-50 rounded-lg border border-green-200">
-                    <h4 className="font-semibold text-sm text-[#1B5E20] mb-1">Next Resumption Date</h4>
-                    <p className="text-gray-700 text-sm font-bold">{new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                  </div>
-                )}
+              </div>
+
+              <div className="bg-[#1B5E20]/5 border border-[#1B5E20]/20 rounded-lg p-4 sm:p-5 mb-4">
+                <p className="text-xs sm:text-sm text-gray-700 leading-relaxed text-center italic">
+                  At Phronesis Int'l School, we uphold the highest standards of academic excellence, integrity, and moral discipline. This result is a true reflection of our commitment to nurturing future leaders with strong character and a passion for learning. We remain dedicated to providing a seamless, transparent, and credible educational experience for every child. Thank you for trusting us with your ward's educational journey — together we are building a legacy of excellence.
+                </p>
               </div>
 
               <div className="text-center pt-4 border-t border-gray-200">

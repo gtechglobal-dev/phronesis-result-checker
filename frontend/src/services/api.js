@@ -44,7 +44,7 @@ export const authAPI = {
 
 export const classAPI = {
   getAll: () => api.get("/classes"),
-  getSubjects: (classId) => api.get(`/classes/${classId}/subjects`),
+  getSubjects: (classId, params) => api.get(`/classes/${classId}/subjects`, { params }),
   create: (data) => api.post("/classes", data),
   createSubject: (data) => api.post("/classes/subjects", data),
   bulkCreateSubjects: (data) => api.post("/classes/subjects/bulk", data),
@@ -58,6 +58,8 @@ export const classAPI = {
   deleteTerm: (id) => api.delete(`/classes/terms/${id}`),
   deleteClass: (id) => api.delete(`/classes/${id}`),
   deleteSubject: (id) => api.delete(`/classes/subjects/${id}`),
+  copySubjectsFromSession: (data) => api.post("/classes/subjects/copy", data),
+  reactivateSession: (data) => api.post("/classes/sessions/reactivate", data),
 };
 
 export const studentAPI = {
@@ -70,6 +72,7 @@ export const studentAPI = {
   bulkCreate: (data) => api.post("/students/bulk", data),
   update: (id, data) => api.put(`/students/${id}`, data),
   remove: (id) => api.delete(`/students/${id}`),
+  carryForward: (data) => api.post("/students/carry-forward", data),
 };
 
 export const resultAPI = {

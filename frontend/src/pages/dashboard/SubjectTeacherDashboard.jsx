@@ -60,10 +60,10 @@ export default function SubjectTeacherDashboard() {
 
   useEffect(() => {
     if (!selectedClassId) { setSubjects([]); return }
-    classAPI.getSubjects(selectedClassId).then(res => setSubjects(Array.isArray(res.data) ? res.data : [])).catch(err => {
+    classAPI.getSubjects(selectedClassId, { params: { sessionId: selectedSession } }).then(res => setSubjects(Array.isArray(res.data) ? res.data : [])).catch(err => {
       console.error('Failed to load subjects:', err?.response?.data || err.message)
     })
-  }, [selectedClassId])
+  }, [selectedClassId, selectedSession])
 
   useEffect(() => {
     if (!selectedClassId || !selectedSubjectId || !selectedSession || !selectedTerm) {
@@ -79,13 +79,13 @@ export default function SubjectTeacherDashboard() {
 
   const refreshSubjects = useCallback(() => {
     if (!selectedClassId) { setSubjects([]); return }
-    classAPI.getSubjects(selectedClassId).then(res => setSubjects(Array.isArray(res.data) ? res.data : [])).catch(err => {
+    classAPI.getSubjects(selectedClassId, { params: { sessionId: selectedSession } }).then(res => setSubjects(Array.isArray(res.data) ? res.data : [])).catch(err => {
       console.error('refreshSubjects error:', err?.response?.data || err.message)
     })
-  }, [selectedClassId])
+  }, [selectedClassId, selectedSession])
 
-  const refreshScores = useCallback(() => {
-    if (selectedClassId && selectedSubjectId && selectedSession && selectedTerm) loadScores()
+  const refreshScores = useCallback((silent = true) => {
+    if (selectedClassId && selectedSubjectId && selectedSession && selectedTerm) loadScores(silent)
   }, [selectedClassId, selectedSubjectId, selectedSession, selectedTerm])
 
   const handleEntityUpdated = useCallback((data) => {
@@ -101,12 +101,12 @@ export default function SubjectTeacherDashboard() {
   }, [refreshClasses, refreshSubjects, refreshScores, selectedSubjectId, selectedClassId])
 
   useSocketListener('entity:updated', handleEntityUpdated)
-  useSocketListener('scores:saved', refreshScores)
-  useSocketListener('scores:submitted', refreshScores)
+  useSocketListener('scores:saved', () => refreshScores())
+  useSocketListener('scores:submitted', () => refreshScores())
 
-  const loadScores = async () => {
+  const loadScores = async (silent) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const res = await subjectTeacherAPI.getScores({
         sessionId: selectedSession,
         termId: selectedTerm,
@@ -121,9 +121,9 @@ export default function SubjectTeacherDashboard() {
       setSubmitted(res.data.submitted || false)
     } catch (err) {
       console.error('loadScores error:', err?.response?.data || err.message)
-      showMessage('error', 'Failed to load scores')
+      if (!silent) showMessage('error', 'Failed to load scores')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -148,7 +148,6 @@ export default function SubjectTeacherDashboard() {
           ca2: pending[s._id || s.id]?.ca2 || 0,
           exam: pending[s._id || s.id]?.exam || 0
         }))
-      setSaving(true)
       subjectTeacherAPI.saveScores({
         sessionId: selectedSession,
         termId: selectedTerm,
@@ -157,11 +156,8 @@ export default function SubjectTeacherDashboard() {
         scores: scoresArr
       }).then(() => {
         dirtyRef.current = false
-        showMessage('success', 'Scores saved')
-      }).catch((err) => {
-        showMessage('error', err.response?.data?.message || 'Error saving scores')
-      }).finally(() => setSaving(false))
-    }, 100)
+      }).catch(() => {})
+    }, 300)
   }, [scores, students, submitted, selectedSession, selectedTerm, selectedClassId, selectedSubjectId])
 
   const confirmSubmit = async () => {
@@ -274,9 +270,77 @@ export default function SubjectTeacherDashboard() {
           </div>
         ) : students.length > 0 ? (
           <>
-            <div className="relative overflow-x-auto max-h-[calc(100vh-320px)] border border-gray-200 rounded-lg">
+            <style>{`
+              @media (max-width: 639px) {
+                .st-mobile-table thead { display: none; }
+                .st-mobile-table tfoot { display: none; }
+                .st-mobile-table tbody { display: block; }
+                .st-mobile-table tr {
+                  display: flex;
+                  flex-wrap: wrap;
+                  align-items: center;
+                  border: 1px solid #e5e7eb;
+                  border-radius: 8px;
+                  padding: 10px;
+                  margin-bottom: 8px;
+                  background: white;
+                }
+                .st-mobile-table td {
+                  border: none;
+                  padding: 2px 4px;
+                }
+                .st-mobile-table td:nth-child(1) {
+                  color: #6b7280;
+                  font-size: 12px;
+                  flex-shrink: 0;
+                }
+                .st-mobile-table td:nth-child(2) {
+                  flex: 1;
+                  font-size: 13px;
+                  font-weight: 500;
+                }
+                .st-mobile-table td:nth-child(3) {
+                  font-size: 11px;
+                  color: #9ca3af;
+                  flex-shrink: 0;
+                }
+                .st-mobile-table td:nth-child(3)::before {
+                  content: "|";
+                  color: #d1d5db;
+                  margin: 0 4px;
+                }
+                .st-mobile-table td:nth-child(4),
+                .st-mobile-table td:nth-child(5),
+                .st-mobile-table td:nth-child(6),
+                .st-mobile-table td:nth-child(7) {
+                  flex: 1;
+                  text-align: center;
+                  padding: 6px 2px 2px;
+                }
+                .st-mobile-table td:nth-child(4)::before,
+                .st-mobile-table td:nth-child(5)::before,
+                .st-mobile-table td:nth-child(6)::before,
+                .st-mobile-table td:nth-child(7)::before {
+                  display: block;
+                  font-size: 10px;
+                  color: #6b7280;
+                  margin-bottom: 2px;
+                  font-weight: 600;
+                }
+                .st-mobile-table td:nth-child(4)::before { content: "CA1"; }
+                .st-mobile-table td:nth-child(5)::before { content: "CA2"; }
+                .st-mobile-table td:nth-child(6)::before { content: "EXAM"; }
+                .st-mobile-table td:nth-child(7)::before { content: "Total"; }
+                .st-mobile-table td input {
+                  width: 100% !important;
+                  font-size: 14px !important;
+                  padding: 6px 0 !important;
+                }
+              }
+            `}</style>
+            <div className="relative overflow-x-auto sm:overflow-x-auto max-h-[calc(100vh-320px)] border border-gray-200 rounded-lg">
               <div className="pointer-events-none sticky right-0 top-0 bottom-0 w-8 z-20 bg-gradient-to-l from-black/5 to-transparent" />
-              <table className="w-full text-xs sm:text-sm whitespace-nowrap">
+              <table className="st-mobile-table w-full text-xs sm:text-sm sm:whitespace-nowrap">
                 <thead className="sticky top-0 z-20 bg-gray-50">
                   <tr>
                     <th className="sticky left-0 z-30 bg-gray-50 text-center p-2 sm:p-3 font-medium text-gray-600 w-12 min-w-[48px]">S/N</th>
@@ -294,8 +358,8 @@ export default function SubjectTeacherDashboard() {
                     const form = scores[sid] || {}
                     return (
                       <tr key={sid} className="border-t hover:bg-gray-50 group">
-                        <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 text-center p-2 sm:p-3 text-gray-500">{idx + 1}</td>
-                        <td className="sticky left-[48px] z-10 bg-white group-hover:bg-gray-50 p-2 sm:p-3 font-medium">{student.lastName} {student.firstName}</td>
+                        <td className="sm:sticky sm:left-0 sm:z-10 bg-white group-hover:bg-gray-50 text-center p-2 sm:p-3 text-gray-500">{idx + 1}</td>
+                        <td className="sm:sticky sm:left-[48px] sm:z-10 bg-white group-hover:bg-gray-50 p-2 sm:p-3 font-medium">{student.lastName} {student.firstName}</td>
                         <td className="text-center p-2 sm:p-3 text-gray-500 text-xs">{student.regNo}</td>
                         <td className="p-2 sm:p-3 text-center">
                           <input type="number" min="0" max="20" value={form.ca1 || ''}
@@ -362,15 +426,6 @@ export default function SubjectTeacherDashboard() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {submitting && !showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center gap-4">
-            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#1B5E20]" />
-            <p className="text-sm font-medium text-gray-700">Submitting scores...</p>
           </div>
         </div>
       )}

@@ -90,12 +90,12 @@ export default function ExamOfficerDashboard() {
   });
   const [sessionForm, setSessionForm] = useState({
     name: "",
-    isCurrent: false,
+    isCurrent: true,
   });
   const [termForm, setTermForm] = useState({
     name: "",
     sessionId: "",
-    isCurrent: false,
+    isCurrent: true,
   });
   const [teacherForm, setTeacherForm] = useState({
     firstName: "",
@@ -133,6 +133,10 @@ export default function ExamOfficerDashboard() {
     'Behavioural misconduct towards school authorities. Please contact the school.'
   ]
 
+  const [reactivateModal, setReactivateModal] = useState(null)
+  const [reactivateTermId, setReactivateTermId] = useState('')
+  const [reactivating, setReactivating] = useState(false)
+
   const [archiveSessions, setArchiveSessions] = useState([]);
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [archiveLevel, setArchiveLevel] = useState('sessions');
@@ -151,6 +155,7 @@ export default function ExamOfficerDashboard() {
   const [subjectRegForm, setSubjectRegForm] = useState({
     name: "",
     classId: "",
+    sessionId: "",
   });
   const [subjectRegLoading, setSubjectRegLoading] = useState(false);
   const [regClassSubjects, setRegClassSubjects] = useState([]);
@@ -159,6 +164,15 @@ export default function ExamOfficerDashboard() {
   const [bulkSubjectsLoading, setBulkSubjectsLoading] = useState(false);
   const [subjectSearch, setSubjectSearch] = useState("");
   const [showSubjectDropdown, setShowSubjectDropdown] = useState(false);
+  const [copySubjectsLoading, setCopySubjectsLoading] = useState(false);
+  const [copyMessage, setCopyMessage] = useState(null);
+
+  useEffect(() => {
+    if (copyMessage) {
+      const t = setTimeout(() => setCopyMessage(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [copyMessage]);
 
   const refreshCurrentTab = useCallback(() => {
     if (activeTab === 'sessions') { loadClasses(); loadSessions() }
@@ -323,13 +337,32 @@ export default function ExamOfficerDashboard() {
     }
   };
 
+  const handleReactivate = async () => {
+    if (!reactivateModal) return
+    setReactivating(true)
+    try {
+      await classAPI.reactivateSession({
+        sessionId: reactivateModal._id,
+        termId: reactivateTermId || undefined,
+      })
+      setMessage(`${reactivateModal.name} reactivated${reactivateTermId ? ' with selected term' : ''}`)
+      setReactivateModal(null)
+      setReactivateTermId('')
+      loadSessions()
+    } catch (err) {
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to reactivate session' })
+    } finally {
+      setReactivating(false)
+    }
+  }
+
   const handleCreateSession = async (e) => {
     e.preventDefault();
     setSessionLoading(true);
     try {
       await classAPI.createSession(sessionForm);
       setMessage("Session created");
-      setSessionForm({ name: "", isCurrent: false });
+      setSessionForm({ name: "", isCurrent: true });
       loadSessions();
     } catch (err) {
       console.error(err);
@@ -348,7 +381,7 @@ export default function ExamOfficerDashboard() {
     try {
       await classAPI.createTerm(termForm);
       setMessage("Term created");
-      setTermForm({ name: "", sessionId: "", isCurrent: false });
+      setTermForm({ name: "", sessionId: "", isCurrent: true });
       loadSessions();
     } catch (err) {
       console.error(err);
@@ -741,6 +774,10 @@ export default function ExamOfficerDashboard() {
                     <div key={s._id} className="border rounded-lg p-3">
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-sm">{s.name}</span>
+                        <button onClick={() => setReactivateModal(s)}
+                          className="text-[11px] text-[#1B5E20] border border-[#1B5E20] rounded px-2 py-0.5 hover:bg-[#1B5E20] hover:text-white transition">
+                          Reactivate
+                        </button>
                       </div>
                       {s.terms?.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -838,6 +875,53 @@ export default function ExamOfficerDashboard() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {reactivateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => { if (!reactivating) setReactivateModal(null) }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-base text-gray-800 mb-1">Reactivate Session</h3>
+            <p className="text-sm text-gray-500 mb-4">Set <strong>{reactivateModal.name}</strong> as the current session and choose which term to activate.</p>
+
+            {reactivateModal.terms?.length > 0 ? (
+              <div className="space-y-2 mb-5">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select Term to Activate</label>
+                {reactivateModal.terms.map((t) => (
+                  <label key={t._id}
+                    className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition ${
+                      reactivateTermId === t._id ? 'border-[#1B5E20] bg-green-50' : 'border-gray-200 hover:bg-gray-50'
+                    }`}>
+                    <input type="radio" name="reactivateTerm" value={t._id}
+                      checked={reactivateTermId === t._id}
+                      onChange={() => setReactivateTermId(t._id)}
+                      className="w-4 h-4 text-[#1B5E20] focus:ring-[#1B5E20]" />
+                    <span className="text-sm font-medium text-gray-800">{t.name}</span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-5">
+                <p className="text-xs text-yellow-700">This session has no terms. Only the session will be activated.</p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button onClick={() => { setReactivateModal(null); setReactivateTermId('') }}
+                disabled={reactivating}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition disabled:opacity-50 cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={handleReactivate}
+                disabled={reactivating || (reactivateModal.terms?.length > 0 && !reactivateTermId)}
+                className="flex-1 px-4 py-2.5 bg-[#1B5E20] hover:bg-[#2E7D32] text-white rounded-lg text-sm font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer">
+                {reactivating && <Spinner small />}
+                {reactivating ? 'Reactivating...' : 'Reactivate'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1180,6 +1264,32 @@ export default function ExamOfficerDashboard() {
 
           <div className="mb-4">
             <label className="block text-xs font-medium text-gray-600 mb-1">
+              Session
+            </label>
+            <select
+              required
+              value={subjectRegForm.sessionId}
+              onChange={(e) => {
+                const sid = e.target.value;
+                setSubjectRegForm({ name: "", classId: "", sessionId: sid });
+                setRegClassSubjects([]);
+                setSubjectSearch("");
+                setShowSubjectDropdown(false);
+                setBulkSubjectsText("");
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            >
+              <option value="">Select session</option>
+              {sessions.map((s) => (
+                <option key={s._id} value={s._id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
               Class
             </label>
             <select
@@ -1187,14 +1297,14 @@ export default function ExamOfficerDashboard() {
               value={subjectRegForm.classId}
               onChange={async (e) => {
                 const cid = e.target.value;
-                setSubjectRegForm({ name: "", classId: cid });
+                setSubjectRegForm(prev => ({ ...prev, name: "", classId: cid }));
                 setSubjectSearch("");
                 setShowSubjectDropdown(false);
                 setBulkSubjectsText("");
-                if (cid) {
+                if (cid && subjectRegForm.sessionId) {
                   setRegClassSubjectsLoading(true);
                   try {
-                    const res = await classAPI.getSubjects(cid);
+                    const res = await classAPI.getSubjects(cid, { params: { sessionId: subjectRegForm.sessionId } });
                     setRegClassSubjects(res.data);
                   } catch (err) {
                     setMessage({ type: "error", text: err.response?.data?.message || "Failed to load subjects" });
@@ -1214,8 +1324,65 @@ export default function ExamOfficerDashboard() {
             </select>
           </div>
 
-          {subjectRegForm.classId && (
+          {subjectRegForm.classId && subjectRegForm.sessionId && (
             <>
+              <div className="border rounded-lg p-4 mb-4">
+                <h4 className="font-semibold text-sm text-gray-700 mb-3">
+                  Copy Subjects from Previous Session
+                </h4>
+                <select
+                  id="copyFromSession"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-3"
+                  defaultValue=""
+                >
+                  <option value="" disabled>Select source session...</option>
+                  {sessions.filter(s => s._id !== subjectRegForm.sessionId).map(s => (
+                    <option key={s._id} value={s._id}>{s.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={async () => {
+                    const fromSessionId = document.getElementById('copyFromSession').value;
+                    if (!fromSessionId) {
+                      setCopyMessage({ type: "error", text: "Please select a source session" });
+                      return;
+                    }
+                    setCopySubjectsLoading(true);
+                    try {
+                      await classAPI.copySubjectsFromSession({
+                        fromSessionId,
+                        toSessionId: subjectRegForm.sessionId,
+                        classMappings: [{ fromClassId: subjectRegForm.classId, toClassId: subjectRegForm.classId }]
+                      });
+                      setCopyMessage({ type: "success", text: "Subjects copied successfully" });
+                      const res = await classAPI.getSubjects(subjectRegForm.classId, { params: { sessionId: subjectRegForm.sessionId } });
+                      setRegClassSubjects(res.data);
+                    } catch (err) {
+                      setCopyMessage({ type: "error", text: err.response?.data?.message || "Error copying subjects" });
+                    } finally {
+                      setCopySubjectsLoading(false);
+                    }
+                  }}
+                  disabled={copySubjectsLoading}
+                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+                >
+                  {copySubjectsLoading ? "Copying..." : "Copy Subjects"}
+                </button>
+
+              {copyMessage && (
+                <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-[fadeInUp_0.3s_ease-out]">
+                  <div className={`px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium ${copyMessage.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+                    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      {copyMessage.type === 'success'
+                        ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      }
+                    </svg>
+                    {copyMessage.text}
+                  </div>
+                </div>
+              )}
+              </div>
               <div className="border rounded-lg p-4 mb-4">
                 <h4 className="font-semibold text-sm text-gray-700 mb-3">
                   Add Single Subject
@@ -1227,12 +1394,12 @@ export default function ExamOfficerDashboard() {
                     setShowSubjectDropdown(false);
                     setSubjectRegLoading(true);
                     try {
-                      await classAPI.createSubject(subjectRegForm);
-                      setSubjectRegForm({ name: "", classId: subjectRegForm.classId });
+                      await classAPI.createSubject({ name: subjectRegForm.name, classId: subjectRegForm.classId, sessionId: subjectRegForm.sessionId });
+                      setSubjectRegForm(prev => ({ ...prev, name: "" }));
                       setSubjectSearch("");
                       setMessage({ type: "success", text: "Subject added successfully" });
                       try {
-                        const res = await classAPI.getSubjects(subjectRegForm.classId);
+                        const res = await classAPI.getSubjects(subjectRegForm.classId, { params: { sessionId: subjectRegForm.sessionId } });
                         setRegClassSubjects(res.data);
                       } catch (refreshErr) {
                         console.error("Failed to refresh subjects list", refreshErr);
@@ -1257,7 +1424,7 @@ export default function ExamOfficerDashboard() {
                       onChange={(e) => {
                         const val = e.target.value.toUpperCase();
                         setSubjectSearch(val);
-                        setSubjectRegForm({ ...subjectRegForm, name: val });
+                        setSubjectRegForm(prev => ({ ...prev, name: val }));
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                     />
@@ -1271,12 +1438,12 @@ export default function ExamOfficerDashboard() {
                                   setShowSubjectDropdown(false);
                                   setSubjectRegLoading(true);
                                   try {
-                                    await classAPI.createSubject({ name: s, classId: subjectRegForm.classId });
-                                    setSubjectRegForm({ name: "", classId: subjectRegForm.classId });
+                                    await classAPI.createSubject({ name: s, classId: subjectRegForm.classId, sessionId: subjectRegForm.sessionId });
+                                    setSubjectRegForm(prev => ({ ...prev, name: "" }));
                                     setSubjectSearch("");
                                     setMessage({ type: "success", text: "Subject added successfully" });
                                     try {
-                                      const res = await classAPI.getSubjects(subjectRegForm.classId);
+                                      const res = await classAPI.getSubjects(subjectRegForm.classId, { params: { sessionId: subjectRegForm.sessionId } });
                                       setRegClassSubjects(res.data);
                                     } catch (refreshErr) {
                                       console.error("Failed to refresh subjects list", refreshErr);
@@ -1341,6 +1508,7 @@ export default function ExamOfficerDashboard() {
                       const res = await classAPI.bulkCreateSubjects({
                         names,
                         classId: subjectRegForm.classId,
+                        sessionId: subjectRegForm.sessionId,
                       });
                       setMessage({
                         type: "success",
@@ -1349,6 +1517,7 @@ export default function ExamOfficerDashboard() {
                       setBulkSubjectsText("");
                       const subjectsRes = await classAPI.getSubjects(
                         subjectRegForm.classId,
+                        { params: { sessionId: subjectRegForm.sessionId } }
                       );
                       setRegClassSubjects(subjectsRes.data);
                     } catch (err) {
@@ -1379,7 +1548,7 @@ export default function ExamOfficerDashboard() {
             <h4 className="font-semibold text-sm text-gray-700 mb-2">
               Registered Subjects
             </h4>
-            {subjectRegForm.classId ? (
+            {subjectRegForm.classId && subjectRegForm.sessionId ? (
               regClassSubjectsLoading ? (
                 <p className="text-gray-400 text-sm text-center py-4">
                   Loading...
@@ -1403,6 +1572,7 @@ export default function ExamOfficerDashboard() {
                           setMessage({ type: "success", text: "Subject removed" });
                           const res = await classAPI.getSubjects(
                             subjectRegForm.classId,
+                            { params: { sessionId: subjectRegForm.sessionId } }
                           );
                           setRegClassSubjects(res.data);
                         } catch (err) {
@@ -1421,7 +1591,7 @@ export default function ExamOfficerDashboard() {
               )
             ) : (
               <p className="text-gray-400 text-sm text-center py-4">
-                Select a class to view its subjects
+                Select a class and session to view its subjects
               </p>
             )}
           </div>
@@ -2424,14 +2594,6 @@ function TeacherAssignments({ setMessage }) {
                 >
                   Reassign
                 </button>
-                {cls && (
-                  <button
-                    onClick={() => handleCancel(t._id)}
-                    className="text-xs text-red-600 hover:text-red-800 font-medium"
-                  >
-                    Remove Assignment
-                  </button>
-                )}
                 <button
                   onClick={() => { setPwModal(t._id); setPwError(""); setNewPassword(""); }}
                   className="text-xs text-blue-600 hover:text-blue-800 font-medium"

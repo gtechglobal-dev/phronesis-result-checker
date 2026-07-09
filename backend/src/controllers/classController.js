@@ -1,9 +1,36 @@
 const { Class, Subject, ClassTeacher, AcademicSession, Term, User, Student, Result } = require('../models')
+const { isValidObjectId } = require('../utils/sanitize')
 const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
+
+const getClassSortOrder = (name) => {
+  const n = name.toLowerCase().trim()
+  if (n.startsWith('montesorri') || n.startsWith('montessori')) return 1
+  if (n.startsWith('nursery')) return 2
+  if (n.startsWith('basic')) {
+    const num = parseInt(n.match(/\d+/)?.[0] || '1')
+    if (num <= 2) return 2 + num
+    return 4 + (num - 2)
+  }
+  if (n.startsWith('jss')) {
+    const num = parseInt(n.match(/\d+/)?.[0] || '1')
+    const isB = n.includes('b')
+    return 9 + (num - 1) * 2 + (isB ? 1 : 0)
+  }
+  if (n.startsWith('sss')) {
+    const num = parseInt(n.match(/\d+/)?.[0] || '1')
+    if (num === 1) return n.includes('b') ? 16 : 15
+    if (num === 2) return 17
+    if (num === 3) return 18
+    return 14 + num
+  }
+  if (n.startsWith('graduat')) return 19
+  return 99
+}
 
 exports.getClasses = async (req, res) => {
   try {
-    const classes = await Class.find().select('name level').sort({ name: 1 })
+    const classes = await Class.find().select('name level')
+    classes.sort((a, b) => getClassSortOrder(a.name) - getClassSortOrder(b.name))
     res.json(classes)
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: 'Internal error' })
@@ -27,7 +54,10 @@ exports.createClass = async (req, res) => {
 
 exports.getClassSubjects = async (req, res) => {
   try {
-    const subjects = await Subject.find({ class: req.params.classId }).sort({ createdAt: 1 })
+    const { sessionId } = req.query
+    const where = { class: req.params.classId }
+    if (sessionId && isValidObjectId(sessionId)) where.session = sessionId
+    const subjects = await Subject.find(where).sort({ createdAt: 1 })
     res.json(subjects)
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: 'Internal error' })
@@ -36,12 +66,15 @@ exports.getClassSubjects = async (req, res) => {
 
 exports.createSubject = async (req, res) => {
   try {
-    const { name, classId } = req.body
-    const existing = await Subject.findOne({ name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' }, class: classId })
-    if (existing) {
-      return res.status(400).json({ message: 'Subject already exists in this class' })
+    const { name, classId, sessionId } = req.body
+    if (!sessionId || !isValidObjectId(sessionId)) {
+      return res.status(400).json({ message: 'sessionId is required' })
     }
-    const subject = await Subject.create({ name, class: classId })
+    const existing = await Subject.findOne({ name: { $regex: `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' }, class: classId, session: sessionId })
+    if (existing) {
+      return res.status(400).json({ message: 'Subject already exists in this class for this session' })
+    }
+    const subject = await Subject.create({ name, class: classId, session: sessionId })
     res.status(201).json(subject)
     try { emitBroadcast('entity:updated', { type: 'subject' }) } catch (e) {}
   } catch (error) {
@@ -51,23 +84,65 @@ exports.createSubject = async (req, res) => {
 
 exports.bulkCreateSubjects = async (req, res) => {
   try {
-    const { names, classId } = req.body
+    const { names, classId, sessionId } = req.body
     if (!names || !Array.isArray(names) || names.length === 0) {
       return res.status(400).json({ message: 'Subject names are required' })
     }
-    const existing = await Subject.find({ class: classId }).select('name')
+    if (!sessionId || !isValidObjectId(sessionId)) {
+      return res.status(400).json({ message: 'sessionId is required' })
+    }
+    const existing = await Subject.find({ class: classId, session: sessionId }).select('name')
     const existingNames = new Set(existing.map((s) => s.name.toLowerCase()))
     const created = []
     for (const name of names) {
       const trimmed = name.trim()
       if (!trimmed || existingNames.has(trimmed.toLowerCase())) continue
-      const subject = await Subject.create({ name: trimmed, class: classId })
+      const subject = await Subject.create({ name: trimmed, class: classId, session: sessionId })
       created.push(subject)
       existingNames.add(trimmed.toLowerCase())
     }
     res.status(201).json({ subjects: created, count: created.length })
     try { emitBroadcast('entity:updated', { type: 'subject' }) } catch (e) {}
   } catch (error) {
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
+  }
+}
+
+exports.copySubjectsFromSession = async (req, res) => {
+  try {
+    const { fromSessionId, toSessionId, classMappings } = req.body
+    if (!fromSessionId || !toSessionId || !classMappings || !Array.isArray(classMappings)) {
+      return res.status(400).json({ message: 'fromSessionId, toSessionId, and classMappings array required' })
+    }
+
+    let copied = 0
+    let skipped = 0
+
+    for (const mapping of classMappings) {
+      const { fromClassId, toClassId } = mapping
+      if (!fromClassId || !toClassId) continue
+
+      const subjects = await Subject.find({ class: fromClassId, session: fromSessionId })
+
+      for (const subject of subjects) {
+        const exists = await Subject.findOne({ name: subject.name, class: toClassId, session: toSessionId })
+        if (exists) {
+          skipped++
+          continue
+        }
+        await Subject.create({
+          name: subject.name,
+          class: toClassId,
+          session: toSessionId,
+        })
+        copied++
+      }
+    }
+
+    res.json({ message: `${copied} subjects copied, ${skipped} skipped (already exist)` })
+    try { emitBroadcast('entity:updated', { type: 'subject' }) } catch (e) {}
+  } catch (error) {
+    console.error('copySubjectsFromSession error:', error)
     res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
@@ -201,6 +276,28 @@ exports.deleteSession = async (req, res) => {
     try { emitBroadcast('entity:updated', { type: 'session' }) } catch (e) {}
   } catch (error) {
     console.error('deleteSession error:', error)
+    res.status(500).json({ message: 'Server error' })
+  }
+}
+
+exports.reactivateSession = async (req, res) => {
+  try {
+    const { sessionId, termId } = req.body
+    if (!sessionId) return res.status(400).json({ message: 'Session ID is required' })
+
+    await AcademicSession.updateMany({ isCurrent: true }, { isCurrent: false })
+    await AcademicSession.findByIdAndUpdate(sessionId, { isCurrent: true })
+
+    if (termId) {
+      await Term.updateMany({ isCurrent: true }, { isCurrent: false })
+      await Term.findByIdAndUpdate(termId, { isCurrent: true })
+    }
+
+    const session = await AcademicSession.findById(sessionId).populate('terms')
+    res.json({ message: 'Session reactivated', session })
+    try { emitBroadcast('entity:updated', { type: 'session' }) } catch (e) {}
+  } catch (error) {
+    console.error('reactivateSession error:', error)
     res.status(500).json({ message: 'Server error' })
   }
 }

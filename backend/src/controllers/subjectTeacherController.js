@@ -25,7 +25,7 @@ exports.getScores = async (req, res) => {
       .populate('student')
       .populate({ path: 'details', match: { subject: subjectId } })
 
-    const students = await Student.find({ class: classId }).sort({ lastName: 1 })
+    const students = await Student.find({ class: classId, session: sessionId }).sort({ lastName: 1 })
 
     const scoreMap = {}
     for (const r of results) {
@@ -115,7 +115,7 @@ exports.submitScores = async (req, res) => {
       return res.status(400).json({ message: 'Missing required fields' })
     }
 
-    const students = await Student.find({ class: classId }).select('_id')
+    const students = await Student.find({ class: classId, session: sessionId }).select('_id')
     const results = await Result.find({ class: classId, session: sessionId, term: termId })
       .populate('student')
       .populate({ path: 'details', match: { subject: subjectId } })
