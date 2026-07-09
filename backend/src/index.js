@@ -22,24 +22,15 @@ const app = express()
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000').split(',').map(s => s.trim())
 
 app.set('trust proxy', 1)
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "*"],
-      fontSrc: ["'self'", "data:"],
-      connectSrc: ["'self'", "ws:", "wss:"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'self'"],
-    },
-  },
-}))
+app.use(helmet({ contentSecurityPolicy: false }))
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) return callback(null, true)
-    callback(new Error('Not allowed by CORS'))
+    if (!origin) return callback(null, true)
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) return callback(null, true)
+    if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true)
+    if (/^https?:\/\/.+\.onrender\.com$/.test(origin)) return callback(null, true)
+    console.warn(`CORS: allowing unknown origin ${origin}`)
+    callback(null, true)
   },
   credentials: true,
 }))
