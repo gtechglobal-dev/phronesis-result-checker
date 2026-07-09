@@ -5,9 +5,9 @@ services:
     repo: https://github.com/gtechglobal-dev/phronesis-result-checker
     plan: free
     region: oregon
-    rootDir: backend
-    buildCommand: npm ci
-    startCommand: node src/index.js
+    rootDir: .
+    buildCommand: cd backend && npm ci && cd ../frontend && npm install && npm run build
+    startCommand: cd backend && node src/index.js
     envVars:
       - key: NODE_VERSION
         value: 18
@@ -16,29 +16,10 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: ALLOWED_ORIGINS
-        value: https://phronesis-frontend.onrender.com
+        value: https://phronesis-backend.onrender.com
       - key: ADMIN_USERNAMES
         value: Admin1,Admin2,Admin3
       - key: ADMIN_PASSWORD
         sync: false
       - key: SUBJECT_TEACHER_PASSWORD
         sync: false
-
-  - type: static
-    name: phronesis-frontend
-    repo: https://github.com/gtechglobal-dev/phronesis-result-checker
-    plan: free
-    region: oregon
-    rootDir: frontend
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist
-    envVars:
-      - key: VITE_API_URL
-        fromService:
-          name: phronesis-backend
-          type: web
-          property: url
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
