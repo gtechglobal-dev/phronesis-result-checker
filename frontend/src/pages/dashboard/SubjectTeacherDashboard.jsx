@@ -308,86 +308,17 @@ export default function SubjectTeacherDashboard() {
           </div>
         ) : students.length > 0 ? (
           <>
-            <style>{`
-              @media (max-width: 639px) {
-                .st-mobile-table thead { display: none; }
-                .st-mobile-table tfoot { display: none; }
-                .st-mobile-table tbody { display: block; }
-                .st-mobile-table tr {
-                  display: flex;
-                  flex-wrap: wrap;
-                  align-items: center;
-                  border: 1px solid #e5e7eb;
-                  border-radius: 8px;
-                  padding: 10px;
-                  margin-bottom: 8px;
-                  background: white;
-                }
-                .st-mobile-table td {
-                  border: none;
-                  padding: 2px 4px;
-                }
-                .st-mobile-table td:nth-child(1) {
-                  color: #6b7280;
-                  font-size: 12px;
-                  flex-shrink: 0;
-                }
-                .st-mobile-table td:nth-child(2) {
-                  flex: 1;
-                  font-size: 13px;
-                  font-weight: 500;
-                }
-                .st-mobile-table td:nth-child(3) {
-                  font-size: 11px;
-                  color: #9ca3af;
-                  flex-shrink: 0;
-                }
-                .st-mobile-table td:nth-child(3)::before {
-                  content: "|";
-                  color: #d1d5db;
-                  margin: 0 4px;
-                }
-                .st-mobile-table td:nth-child(4),
-                .st-mobile-table td:nth-child(5),
-                .st-mobile-table td:nth-child(6),
-                .st-mobile-table td:nth-child(7) {
-                  flex: 1;
-                  text-align: center;
-                  padding: 6px 2px 2px;
-                }
-                .st-mobile-table td:nth-child(4)::before,
-                .st-mobile-table td:nth-child(5)::before,
-                .st-mobile-table td:nth-child(6)::before,
-                .st-mobile-table td:nth-child(7)::before {
-                  display: block;
-                  font-size: 10px;
-                  color: #6b7280;
-                  margin-bottom: 2px;
-                  font-weight: 600;
-                }
-                .st-mobile-table td:nth-child(4)::before { content: "CA1"; }
-                .st-mobile-table td:nth-child(5)::before { content: "CA2"; }
-                .st-mobile-table td:nth-child(6)::before { content: "EXAM"; }
-                .st-mobile-table td:nth-child(7)::before { content: "Total"; }
-                .st-mobile-table td input {
-                  width: 100% !important;
-                  font-size: 14px !important;
-                  padding: 6px 0 !important;
-                }
-              }
-            `}</style>
-            <div className="relative overflow-x-auto sm:overflow-x-auto max-h-[calc(100vh-320px)] border border-gray-200 rounded-lg">
-              <div className="pointer-events-none sticky right-0 top-0 bottom-0 w-8 z-20 bg-gradient-to-l from-black/5 to-transparent" />
-              <table className="st-mobile-table w-full text-xs sm:text-sm sm:whitespace-nowrap">
+            <div className="hidden sm:block relative overflow-x-auto max-h-[calc(100vh-320px)] border border-gray-200 rounded-lg">
+              <table className="w-full text-sm whitespace-nowrap">
                 <thead className="sticky top-0 z-20 bg-gray-50">
                   <tr>
-                    <th className="sticky left-0 z-30 bg-gray-50 text-center p-2 sm:p-3 font-medium text-gray-600 w-12 min-w-[48px]">S/N</th>
-                    <th className="sticky left-[48px] z-30 bg-gray-50 text-left p-2 sm:p-3 font-medium text-gray-600 min-w-[140px]">Student Name</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-20">Exam No</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-20">CA1 (20)</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-20">CA2 (20)</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-20">EXAM (60)</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-16">Total</th>
+                    <th className="sticky left-0 z-30 bg-gray-50 text-center p-3 font-medium text-gray-600 w-12 min-w-[48px]">S/N</th>
+                    <th className="sticky left-[48px] z-30 bg-gray-50 text-left p-3 font-medium text-gray-600 min-w-[140px]">Student Name</th>
+                    <th className="text-center p-3 font-medium text-gray-600 w-20">Exam No</th>
+                    <th className="text-center p-3 font-medium text-gray-600 w-20">CA1 (20)</th>
+                    <th className="text-center p-3 font-medium text-gray-600 w-20">CA2 (20)</th>
+                    <th className="text-center p-3 font-medium text-gray-600 w-20">EXAM (60)</th>
+                    <th className="text-center p-3 font-medium text-gray-600 w-16">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -399,39 +330,92 @@ export default function SubjectTeacherDashboard() {
                     const examEmpty = form.exam == null || form.exam === ''
                     return (
                       <tr key={sid} className="border-t hover:bg-gray-50 group">
-                        <td className="sm:sticky sm:left-0 sm:z-10 bg-white group-hover:bg-gray-50 text-center p-2 sm:p-3 text-gray-500">{idx + 1}</td>
-                        <td className="sm:sticky sm:left-[48px] sm:z-10 bg-white group-hover:bg-gray-50 p-2 sm:p-3 font-medium">{student.lastName} {student.firstName}</td>
-                        <td className="text-center p-2 sm:p-3 text-gray-500 text-xs">{student.regNo}</td>
-                        <td className="p-2 sm:p-3 text-center">
+                        <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 text-center p-3 text-gray-500">{idx + 1}</td>
+                        <td className="sticky left-[48px] z-10 bg-white group-hover:bg-gray-50 p-3 font-medium">{student.lastName} {student.firstName}</td>
+                        <td className="text-center p-3 text-gray-500 text-xs">{student.regNo}</td>
+                        <td className="p-3 text-center">
                           <input type="number" min="0" max="20" value={form.ca1 === 0 || form.ca1 == null || form.ca1 === '' ? '' : form.ca1}
                             onChange={(e) => updateScore(sid, 'ca1', e.target.value)}
                             disabled={submitted}
-                            className={`w-14 sm:w-16 px-1.5 sm:px-2 py-1.5 border rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed ${ca1Empty && !submitted ? 'border-orange-300 bg-orange-50' : 'border-gray-300'}`} />
+                            className={`w-16 px-2 py-1.5 border rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed ${ca1Empty && !submitted ? 'border-orange-300 bg-orange-50' : 'border-gray-300'}`} />
                         </td>
-                        <td className="p-2 sm:p-3 text-center">
+                        <td className="p-3 text-center">
                           <input type="number" min="0" max="20" value={form.ca2 === 0 || form.ca2 == null || form.ca2 === '' ? '' : form.ca2}
                             onChange={(e) => updateScore(sid, 'ca2', e.target.value)}
                             disabled={submitted}
-                            className={`w-14 sm:w-16 px-1.5 sm:px-2 py-1.5 border rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed ${ca2Empty && !submitted ? 'border-orange-300 bg-orange-50' : 'border-gray-300'}`} />
+                            className={`w-16 px-2 py-1.5 border rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed ${ca2Empty && !submitted ? 'border-orange-300 bg-orange-50' : 'border-gray-300'}`} />
                         </td>
-                        <td className="p-2 sm:p-3 text-center">
+                        <td className="p-3 text-center">
                           <input type="number" min="0" max="60" value={form.exam === 0 || form.exam == null || form.exam === '' ? '' : form.exam}
                             onChange={(e) => updateScore(sid, 'exam', e.target.value)}
                             disabled={submitted}
-                            className={`w-14 sm:w-16 px-1.5 sm:px-2 py-1.5 border rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed ${examEmpty && !submitted ? 'border-orange-300 bg-orange-50' : 'border-gray-300'}`} />
+                            className={`w-16 px-2 py-1.5 border rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed ${examEmpty && !submitted ? 'border-orange-300 bg-orange-50' : 'border-gray-300'}`} />
                         </td>
-                        <td className="p-2 sm:p-3 text-center font-bold">{getTotal(form)}</td>
+                        <td className="p-3 text-center font-bold">{getTotal(form)}</td>
                       </tr>
                     )
                   })}
                 </tbody>
                 <tfoot>
                   <tr className="bg-gray-50 font-bold">
-                    <td className="sticky left-0 z-10 bg-gray-50 p-2 sm:p-3" colSpan="2"></td>
-                    <td className="p-2 sm:p-3 text-center text-xs text-gray-500" colSpan="5">Max: CA1=20, CA2=20, EXAM=60, Total=100</td>
+                    <td className="sticky left-0 z-10 bg-gray-50 p-3" colSpan="2"></td>
+                    <td className="p-3 text-center text-xs text-gray-500" colSpan="5">Max: CA1=20, CA2=20, EXAM=60, Total=100</td>
                   </tr>
                 </tfoot>
               </table>
+            </div>
+
+            <div className="sm:hidden space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
+              {students.map((student, idx) => {
+                const sid = student._id || student.id
+                const form = scores[sid] || {}
+                const ca1Empty = form.ca1 == null || form.ca1 === ''
+                const ca2Empty = form.ca2 == null || form.ca2 === ''
+                const examEmpty = form.exam == null || form.exam === ''
+                return (
+                  <div key={sid} className="bg-white border border-gray-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-white bg-[#1B5E20] rounded-full w-6 h-6 flex items-center justify-center">{idx + 1}</span>
+                        <span className="font-semibold text-sm text-gray-800">{student.lastName} {student.firstName}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">{student.regNo}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">CA1 <span className="text-gray-400">(20)</span></label>
+                        <input type="number" min="0" max="20" placeholder="0"
+                          value={form.ca1 === 0 || form.ca1 == null || form.ca1 === '' ? '' : form.ca1}
+                          onChange={(e) => updateScore(sid, 'ca1', e.target.value)}
+                          disabled={submitted}
+                          className={`w-full px-3 py-2.5 border rounded-lg text-center text-sm font-medium disabled:bg-gray-100 disabled:cursor-not-allowed ${ca1Empty && !submitted ? 'border-orange-300 bg-orange-50' : 'border-gray-300'}`} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">CA2 <span className="text-gray-400">(20)</span></label>
+                        <input type="number" min="0" max="20" placeholder="0"
+                          value={form.ca2 === 0 || form.ca2 == null || form.ca2 === '' ? '' : form.ca2}
+                          onChange={(e) => updateScore(sid, 'ca2', e.target.value)}
+                          disabled={submitted}
+                          className={`w-full px-3 py-2.5 border rounded-lg text-center text-sm font-medium disabled:bg-gray-100 disabled:cursor-not-allowed ${ca2Empty && !submitted ? 'border-orange-300 bg-orange-50' : 'border-gray-300'}`} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">EXAM <span className="text-gray-400">(60)</span></label>
+                        <input type="number" min="0" max="60" placeholder="0"
+                          value={form.exam === 0 || form.exam == null || form.exam === '' ? '' : form.exam}
+                          onChange={(e) => updateScore(sid, 'exam', e.target.value)}
+                          disabled={submitted}
+                          className={`w-full px-3 py-2.5 border rounded-lg text-center text-sm font-medium disabled:bg-gray-100 disabled:cursor-not-allowed ${examEmpty && !submitted ? 'border-orange-300 bg-orange-50' : 'border-gray-300'}`} />
+                      </div>
+                      <div className="flex items-center justify-center">
+                        <div className="text-center">
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Total</label>
+                          <div className="text-lg font-bold text-[#1B5E20] py-1">{getTotal(form)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
             <div className="mt-6 flex flex-col items-center gap-3">
               <div className="flex items-center gap-3">
