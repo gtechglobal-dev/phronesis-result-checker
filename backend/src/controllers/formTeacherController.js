@@ -137,15 +137,23 @@ exports.updateSettings = async (req, res) => {
 
 exports.updateAttendance = async (req, res) => {
   try {
-    const { records } = req.body
+    const { records, termId } = req.body
     if (!Array.isArray(records)) return res.status(400).json({ message: 'records array required' })
+
+    let maxDays = Infinity
+    if (termId) {
+      const term = await Term.findById(termId).select('daysOpen')
+      if (term?.daysOpen != null) maxDays = term.daysOpen
+    }
 
     for (const rec of records) {
       if (rec.resultId) {
-        await Result.findByIdAndUpdate(rec.resultId, {
-          daysPresent: rec.daysPresent != null ? parseInt(rec.daysPresent) : undefined,
-          daysAbsent: rec.daysAbsent != null ? parseInt(rec.daysAbsent) : undefined
-        })
+        const daysPresent = rec.daysPresent != null ? parseInt(rec.daysPresent) : undefined
+        const daysAbsent = rec.daysAbsent != null ? parseInt(rec.daysAbsent) : undefined
+        if (daysPresent != null && daysPresent > maxDays) {
+          return res.status(400).json({ message: `Days present (${daysPresent}) cannot exceed days school opened (${maxDays})` })
+        }
+        await Result.findByIdAndUpdate(rec.resultId, { daysPresent, daysAbsent })
       }
     }
     res.json({ message: 'Attendance saved' })

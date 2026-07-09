@@ -373,7 +373,7 @@ export default function FormTeacherDashboard() {
     }
     setSavingAttendance(true)
     try {
-      await formTeacherAPI.updateAttendance({ records })
+      await formTeacherAPI.updateAttendance({ records, termId: selectedTerm })
       showMessage('success', 'Attendance saved')
     } catch (err) {
       showMessage('error', err.response?.data?.message || 'Error saving attendance')
@@ -856,13 +856,14 @@ export default function FormTeacherDashboard() {
                       <td className="p-2 font-medium whitespace-nowrap">{row.student.lastName} {row.student.firstName}</td>
                       <td className="p-2 text-center text-xs">{row.student.regNo}</td>
                       <td className="p-2 text-center">
-                        <input type="number" min="0"
+                        <input type="number" min="0" max={daysOpen || undefined}
                           value={attendanceData[row.student.id]?.present || ''}
                           onChange={(e) => {
                             const val = e.target.value;
-                            const present = val === '' ? '' : Number(val);
+                            const maxD = Number(daysOpen) || Infinity;
+                            const present = val === '' ? '' : Math.min(Math.max(0, Number(val)), maxD);
                             const absent = (present !== '' && daysOpen !== '' && Number(daysOpen) > 0) ? Math.max(0, Number(daysOpen) - present) : '';
-                            setAttendanceData(prev => ({ ...prev, [row.student.id]: { ...prev[row.student.id], present: val, absent } }))
+                            setAttendanceData(prev => ({ ...prev, [row.student.id]: { ...prev[row.student.id], present: val === '' ? '' : String(present), absent: absent === '' ? '' : String(absent) }))
                           }}
                           className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm" placeholder="-" />
                       </td>
