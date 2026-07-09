@@ -5,19 +5,19 @@ const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 const getPrincipalRemark = (average) => {
   if (average >= 80) return 'Excellent performance. Keep up the good work!'
   if (average >= 70) return 'Very good performance. Strive for excellence.'
-  if (average >= 60) return 'Good performance. Room for improvement.'
-  if (average >= 50) return 'Fair performance. Needs more effort.'
-  if (average >= 40) return 'Poor performance. Significant improvement needed.'
-  return 'Unsatisfactory performance. Urgent improvement required.'
+  if (average >= 60) return 'Good performance. Keep working hard.'
+  if (average >= 50) return 'Fair performance. There is room for growth.'
+  if (average >= 40) return 'A fair attempt. More focus and practice will help.'
+  return 'Encouragement is needed. With more effort, improvement is certain.'
 }
 
 const getTeacherComment = (average) => {
   if (average >= 80) return 'A consistent and commendable performance. Well done!'
   if (average >= 70) return 'Shown good understanding of the subjects. Keep striving.'
-  if (average >= 60) return 'Making progress. Encourage more reading and practice.'
-  if (average >= 50) return 'Average performance. Needs to be more attentive in class.'
-  if (average >= 40) return 'Below average. Requires extra tutoring and supervision.'
-  return 'Poor performance. Urgent intervention and parental support needed.'
+  if (average >= 60) return 'Making progress. Continue reading and practising.'
+  if (average >= 50) return 'Keep pushing forward. More attention in class will help.'
+  if (average >= 40) return 'Keep trying. With more dedication, you will improve.'
+  return 'We believe in your potential. Let us work harder together.'
 }
 
 const calculateGrade = (score) => {

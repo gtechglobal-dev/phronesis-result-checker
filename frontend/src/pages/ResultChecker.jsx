@@ -223,7 +223,7 @@ export default function ResultChecker() {
               <div className="text-center border-b-2 border-[#1B5E20] pb-3 mb-4">
                 <img src="/school logo.png" alt="Phronesis Int'l School" className="h-14 w-14 sm:h-20 sm:w-20 mx-auto mb-2" />
                 <h1 className="text-lg sm:text-2xl font-bold text-[#1B5E20] tracking-tight">PHRONESIS INT'L SCHOOL</h1>
-                <p className="text-[11px] sm:text-sm text-gray-500 italic">...Building a legacy of excellence</p>
+                <p className="text-[11px] sm:text-sm text-gray-500 italic">...Divine wisdom for excellence</p>
                 <h2 className="text-sm sm:text-base font-bold text-gray-800 mt-2 uppercase tracking-wide">Student's Academic Report</h2>
               </div>
 
@@ -340,7 +340,7 @@ export default function ResultChecker() {
               {/* FOOTER */}
               <div className="text-center">
                 <p className="text-[9px] text-gray-400 italic">
-                  This result is computer-generated and does not require a signature. Phronesis Int'l School — Building a legacy of excellence.
+                  This result is computer-generated and does not require a signature. Phronesis Int'l School — Divine wisdom for excellence.
                 </p>
               </div>
             </div>
