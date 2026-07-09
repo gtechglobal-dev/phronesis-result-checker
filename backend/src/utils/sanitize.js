@@ -4,7 +4,11 @@ const isString = (val) => typeof val === 'string'
 
 const sanitizeString = (val) => {
   if (!isString(val)) return ''
-  return val.replace(/[<>"'&]/g, '')
+  return val
+    .replace(/[<>]/g, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+=/gi, '')
+    .trim()
 }
 
 const escapeRegex = (str) => {

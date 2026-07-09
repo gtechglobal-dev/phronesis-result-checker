@@ -1,3 +1,4 @@
+const crypto = require('crypto')
 const { ResultPin } = require('../models')
 const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 
@@ -6,7 +7,7 @@ const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 function generatePin() {
   let pin = ''
   for (let i = 0; i < 8; i++) {
-    pin += CHARS[Math.floor(Math.random() * CHARS.length)]
+    pin += CHARS[crypto.randomInt(0, CHARS.length)]
   }
   return pin
 }
@@ -30,6 +31,7 @@ exports.generate = async (req, res) => {
 
     const pinDocs = pins.map(pin => ({
       pin,
+      pinHash: ResultPin.hashPin(pin),
       generatedBy: req.user.id
     }))
     await ResultPin.insertMany(pinDocs)

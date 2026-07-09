@@ -37,6 +37,13 @@ exports.createResult = async (req, res) => {
       return res.status(400).json({ message: 'Scores are required' })
     }
 
+    for (const s of scores) {
+      if (typeof s.ca1 !== 'number' || typeof s.ca2 !== 'number' || typeof s.exam !== 'number' ||
+          s.ca1 < 0 || s.ca1 > 40 || s.ca2 < 0 || s.ca2 > 40 || s.exam < 0 || s.exam > 100) {
+        return res.status(400).json({ message: 'Invalid score values. CA: 0-40, Exam: 0-100' })
+      }
+    }
+
     if (className && !classId) {
       if (!isString(className)) return res.status(400).json({ message: 'Invalid class name' })
       const classRecord = await Class.findOne({ name: className })
@@ -87,6 +94,12 @@ exports.createResult = async (req, res) => {
 
 exports.getStudentResults = async (req, res) => {
   try {
+    if (req.user.role === 'PARENT') {
+      const student = await Student.findById(req.params.studentId)
+      if (!student || student.parent?.toString() !== req.user.id) {
+        return res.status(403).json({ message: 'Not authorized to view these results' })
+      }
+    }
     const results = await Result.find({ student: req.params.studentId })
       .populate({
         path: 'details',
@@ -113,6 +126,13 @@ exports.getResult = async (req, res) => {
 
     if (!result) return res.status(404).json({ message: 'Result not found' })
 
+    if (req.user.role === 'PARENT') {
+      const student = await Student.findById(result.student)
+      if (!student || student.parent?.toString() !== req.user.id) {
+        return res.status(403).json({ message: 'Not authorized to view this result' })
+      }
+    }
+
     if (result.withheld && req.user?.role !== 'EXAM_OFFICER') {
       const reason = result.withholdReason || 'Result withheld. Please contact the school.'
       return res.json({ withheld: true, message: reason, student: result.student, class: result.class, session: result.session, term: result.term })
@@ -127,6 +147,9 @@ exports.getResult = async (req, res) => {
 exports.toggleWithhold = async (req, res) => {
   try {
     const { withheld, reason } = req.body
+    if (withheld && reason && (!isString(reason) || reason.length > 500)) {
+      return res.status(400).json({ message: 'Reason must be under 500 characters' })
+    }
     const update = { withheld }
     if (withheld && reason) update.withholdReason = reason
     if (!withheld) update.withholdReason = ''
@@ -141,6 +164,9 @@ exports.toggleWithhold = async (req, res) => {
 exports.addTeacherComment = async (req, res) => {
   try {
     const { teacherComment } = req.body
+    if (!isString(teacherComment) || teacherComment.length > 500) {
+      return res.status(400).json({ message: 'Comment must be under 500 characters' })
+    }
     const result = await Result.findByIdAndUpdate(
       req.params.id,
       { teacherComment, formTeacher: req.user.id },
@@ -184,7 +210,11 @@ exports.checkByRegNo = async (req, res) => {
     const student = await Student.findOne({ regNo: regNo.trim().toUpperCase() }).populate('class')
     if (!student) return res.status(404).json({ message: 'Student not found' })
 
-    const pinRecord = await ResultPin.findOne({ pin: pin.toUpperCase() })
+    const pinHash = ResultPin.hashPin(pin)
+    let pinRecord = await ResultPin.findOne({ pinHash })
+    if (!pinRecord) {
+      pinRecord = await ResultPin.findOne({ pin: pin.toUpperCase() })
+    }
     if (!pinRecord || !pinRecord.isActive) return res.status(401).json({ message: 'Invalid or expired PIN' })
 
     const trimmedRegNo = regNo.trim().toUpperCase()
@@ -210,7 +240,7 @@ exports.checkByRegNo = async (req, res) => {
 
     if (result.withheld) {
       const reason = result.withholdReason || 'Result withheld. Please contact the school.'
-      return res.json({ withheld: true, message: reason, student, result: null })
+      return res.json({ withheld: true, message: reason, student: { _id: student._id, regNo: student.regNo, firstName: student.firstName, lastName: student.lastName }, result: null })
     }
 
     await ResultPin.findByIdAndUpdate(pinRecord._id, {
@@ -223,7 +253,15 @@ exports.checkByRegNo = async (req, res) => {
     const avg = result.average ?? (details.length ? Math.round(details.reduce((s, d) => s + (d.total ?? 0), 0) / details.length * 100) / 100 : 0)
     const termData = await Term.findById(termId)
     res.json({
-      student,
+      student: {
+        _id: student._id,
+        regNo: student.regNo,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        arm: student.arm,
+        gender: student.gender,
+        class: student.class,
+      },
       result: {
         ...result.toJSON(),
         daysOpen: termData?.daysOpen,
@@ -240,6 +278,9 @@ exports.checkByRegNo = async (req, res) => {
 exports.updatePrincipalComment = async (req, res) => {
   try {
     const { principalComment } = req.body
+    if (!isString(principalComment) || principalComment.length > 500) {
+      return res.status(400).json({ message: 'Comment must be under 500 characters' })
+    }
     const result = await Result.findByIdAndUpdate(req.params.id, { principalComment }, { new: true })
     res.json(result)
     try { emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
@@ -633,6 +674,13 @@ exports.updateStudentScores = async (req, res) => {
     const { scores } = req.body
     if (!scores || !Array.isArray(scores) || scores.length === 0) {
       return res.status(400).json({ message: 'Scores are required' })
+    }
+
+    for (const s of scores) {
+      if (typeof s.ca1 !== 'number' || typeof s.ca2 !== 'number' || typeof s.exam !== 'number' ||
+          s.ca1 < 0 || s.ca1 > 40 || s.ca2 < 0 || s.ca2 > 40 || s.exam < 0 || s.exam > 100) {
+        return res.status(400).json({ message: 'Invalid score values. CA: 0-40, Exam: 0-100' })
+      }
     }
 
     const result = await Result.findById(req.params.id)

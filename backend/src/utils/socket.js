@@ -14,16 +14,15 @@ function setupSocket(httpServer) {
 
   io.on('connection', (socket) => {
     const token = socket.handshake.auth?.token;
-    if (token) {
-      try {
-        const jwt = require('jsonwebtoken');
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        users[decoded.id] = socket.id;
-        socket.data.user = decoded;
-        socket.join(decoded.role);
-      } catch {
-        // unauthenticated — still connected, just no room
-      }
+    if (!token) return socket.disconnect(true);
+    try {
+      const jwt = require('jsonwebtoken');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      users[decoded.id] = socket.id;
+      socket.data.user = decoded;
+      socket.join(decoded.role);
+    } catch {
+      return socket.disconnect(true);
     }
 
     socket.on('disconnect', () => {

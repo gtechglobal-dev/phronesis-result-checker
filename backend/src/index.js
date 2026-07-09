@@ -5,7 +5,7 @@ const cors = require('cors')
 const helmet = require('helmet')
 const mongoSanitize = require('express-mongo-sanitize')
 const connectDB = require('./utils/db')
-const { apiLimiter, loginLimiter, pinCheckLimiter } = require('./middlewares/rateLimiter')
+const { apiLimiter, loginLimiter, registerLimiter, pinCheckLimiter } = require('./middlewares/rateLimiter')
 
 const authRoutes = require('./routes/auth')
 const classRoutes = require('./routes/classes')
@@ -21,11 +21,23 @@ const app = express()
 
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000').split(',').map(s => s.trim())
 
-app.use(helmet({ contentSecurityPolicy: false }))
+app.set('trust proxy', 1)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:"],
+      fontSrc: ["'self'"],
+      connectSrc: ["'self'"],
+    },
+  },
+}))
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) return callback(null, true)
-    callback(null, true)
+    callback(new Error('Not allowed by CORS'))
   },
   credentials: true,
 }))
@@ -34,6 +46,7 @@ app.use(mongoSanitize())
 
 app.use('/api/', apiLimiter)
 app.use('/api/auth/login', loginLimiter)
+app.use('/api/auth/register', registerLimiter)
 app.use('/api/results/check', pinCheckLimiter)
 
 app.get('/api/health', (req, res) => {

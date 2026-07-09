@@ -7,9 +7,6 @@ const { emitToRole, emitToUser, emitBroadcast } = require("../utils/socket");
 const ADMIN_USERNAMES = (process.env.ADMIN_USERNAMES || "Admin")
   .split(",")
   .map((s) => s.trim());
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Phronesis2026";
-const SUBJECT_TEACHER_PASSWORD =
-  process.env.SUBJECT_TEACHER_PASSWORD || "Subject2026";
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -21,7 +18,7 @@ const generateToken = (user) => {
       lastName: user.lastName,
     },
     process.env.JWT_SECRET,
-    { expiresIn: "7d" },
+    { expiresIn: "1d" },
   );
 };
 
@@ -110,17 +107,13 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    if (ADMIN_USERNAMES.includes(email.trim()) && password === ADMIN_PASSWORD) {
+    if (ADMIN_USERNAMES.includes(email.trim())) {
       let admin = await User.findOne({ role: "EXAM_OFFICER" });
-      if (!admin) {
-        const hashed = await bcrypt.hash(ADMIN_PASSWORD, 12);
-        admin = await User.create({
-          email: "admin@phronesis.com",
-          password: hashed,
-          firstName: "Exam",
-          lastName: "Officer",
-          role: "EXAM_OFFICER",
-        });
+      if (admin) {
+        const isMatch = await bcrypt.compare(password, admin.password);
+        if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+      } else {
+        return res.status(400).json({ message: "Invalid credentials" });
       }
       const token = generateToken(admin);
       return res.json({
@@ -200,7 +193,10 @@ exports.createTeacher = async (req, res) => {
         const config = await SubjectTeacherConfig.findOne();
         hashedPassword = config?.passwordHash
           ? config.passwordHash
-          : await bcrypt.hash(SUBJECT_TEACHER_PASSWORD, 12);
+          : null;
+      }
+      if (!hashedPassword) {
+        return res.status(400).json({ message: "No subject teacher password configured. Set it first." });
       }
     } else {
       if (!isString(password) || password.length < 6) {
@@ -255,6 +251,7 @@ exports.updateTeacherRole = async (req, res) => {
         const existing = await User.findOne({ role: "SUBJECT_TEACHER" }).select("password");
         if (existing) update.password = existing.password;
       }
+      if (!update.password) return res.status(400).json({ message: "No subject teacher password configured. Set it first." });
     }
     const teacher = await User.findByIdAndUpdate(
       req.params.id,
@@ -340,7 +337,7 @@ exports.updateSubjectTeacherPassword = async (req, res) => {
     await User.updateMany({ role: "SUBJECT_TEACHER" }, { password: hashed });
     await SubjectTeacherConfig.findOneAndUpdate(
       {},
-      { passwordHash: hashed, password },
+      { passwordHash: hashed },
       { upsert: true },
     );
     await User.findOneAndUpdate(
@@ -364,14 +361,14 @@ exports.updateSubjectTeacherPassword = async (req, res) => {
 exports.getSubjectTeacherPasswordHash = async (req, res) => {
   try {
     const config = await SubjectTeacherConfig.findOne();
-    if (config && config.password) {
-      return res.json({ password: config.password });
+    if (config && config.passwordHash) {
+      return res.json({ password: "[set]" });
     }
     const teacher = await User.findOne({ role: "SUBJECT_TEACHER" }).select(
       "password",
     );
     if (teacher && teacher.password) {
-      return res.json({ password: "[set - use update to view]" });
+      return res.json({ password: "[set]" });
     }
     return res.json({ password: "" });
   } catch (error) {
