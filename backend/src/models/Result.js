@@ -11,6 +11,7 @@ const ResultSchema = new mongoose.Schema({
   average: { type: Number, default: 0 },
   position: { type: Number },
   withheld: { type: Boolean, default: false },
+  withholdReason: { type: String, default: '' },
   status: { type: String, default: 'DRAFT', enum: ['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED'] },
   teacherComment: { type: String },
   principalComment: { type: String },

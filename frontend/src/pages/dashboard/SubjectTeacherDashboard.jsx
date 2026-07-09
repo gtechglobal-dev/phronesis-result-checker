@@ -274,17 +274,18 @@ export default function SubjectTeacherDashboard() {
           </div>
         ) : students.length > 0 ? (
           <>
-            <div className="overflow-auto max-h-[calc(100vh-320px)] border border-gray-200 rounded-lg">
-              <table className="w-full text-xs sm:text-sm min-w-[700px]">
+            <div className="relative overflow-x-auto max-h-[calc(100vh-320px)] border border-gray-200 rounded-lg">
+              <div className="pointer-events-none sticky right-0 top-0 bottom-0 w-8 z-20 bg-gradient-to-l from-black/5 to-transparent" />
+              <table className="w-full text-xs sm:text-sm whitespace-nowrap">
                 <thead className="sticky top-0 z-20 bg-gray-50">
                   <tr>
                     <th className="sticky left-0 z-30 bg-gray-50 text-center p-2 sm:p-3 font-medium text-gray-600 w-12 min-w-[48px]">S/N</th>
-                    <th className="sticky left-[48px] z-30 bg-gray-50 text-left p-2 sm:p-3 font-medium text-gray-600 min-w-[160px]">Student Name</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Exam No</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">CA1 (20)</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">CA2 (20)</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">EXAM (60)</th>
-                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-24">Total</th>
+                    <th className="sticky left-[48px] z-30 bg-gray-50 text-left p-2 sm:p-3 font-medium text-gray-600 min-w-[140px]">Student Name</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-20">Exam No</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-20">CA1 (20)</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-20">CA2 (20)</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-20">EXAM (60)</th>
+                    <th className="text-center p-2 sm:p-3 font-medium text-gray-600 w-16">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -294,25 +295,25 @@ export default function SubjectTeacherDashboard() {
                     return (
                       <tr key={sid} className="border-t hover:bg-gray-50 group">
                         <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 text-center p-2 sm:p-3 text-gray-500">{idx + 1}</td>
-                        <td className="sticky left-[48px] z-10 bg-white group-hover:bg-gray-50 p-2 sm:p-3 font-medium whitespace-nowrap">{student.lastName} {student.firstName}</td>
+                        <td className="sticky left-[48px] z-10 bg-white group-hover:bg-gray-50 p-2 sm:p-3 font-medium">{student.lastName} {student.firstName}</td>
                         <td className="text-center p-2 sm:p-3 text-gray-500 text-xs">{student.regNo}</td>
                         <td className="p-2 sm:p-3 text-center">
                           <input type="number" min="0" max="20" value={form.ca1 || ''}
                             onChange={(e) => updateScore(sid, 'ca1', e.target.value)}
                             disabled={submitted}
-                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
+                            className="w-14 sm:w-16 px-1.5 sm:px-2 py-1.5 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
                         </td>
                         <td className="p-2 sm:p-3 text-center">
                           <input type="number" min="0" max="20" value={form.ca2 || ''}
                             onChange={(e) => updateScore(sid, 'ca2', e.target.value)}
                             disabled={submitted}
-                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
+                            className="w-14 sm:w-16 px-1.5 sm:px-2 py-1.5 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
                         </td>
                         <td className="p-2 sm:p-3 text-center">
                           <input type="number" min="0" max="60" value={form.exam || ''}
                             onChange={(e) => updateScore(sid, 'exam', e.target.value)}
                             disabled={submitted}
-                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
+                            className="w-14 sm:w-16 px-1.5 sm:px-2 py-1.5 border border-gray-300 rounded text-center text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
                         </td>
                         <td className="p-2 sm:p-3 text-center font-bold">{getTotal(form)}</td>
                       </tr>

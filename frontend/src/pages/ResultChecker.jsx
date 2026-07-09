@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { resultAPI, classAPI } from '../services/api'
+import { resultAPI } from '../services/api'
 
 export default function ResultChecker() {
   const getOrdinalSuffix = (n) => {
@@ -11,6 +11,7 @@ export default function ResultChecker() {
   const [regNo, setRegNo] = useState('')
   const [sessionId, setSessionId] = useState('')
   const [termId, setTermId] = useState('')
+  const [terms, setTerms] = useState([])
   const [pin, setPin] = useState('')
   const [sessions, setSessions] = useState([])
   const [result, setResult] = useState(null)
@@ -20,8 +21,14 @@ export default function ResultChecker() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    classAPI.getSessions().then(res => { if (Array.isArray(res.data)) setSessions(res.data) }).catch(() => {})
+    resultAPI.getPublishedSessions().then(res => { if (Array.isArray(res.data)) setSessions(res.data) }).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    setTermId('')
+    const s = sessions.find(s => (s._id || s.id) === sessionId)
+    setTerms(s?.terms || [])
+  }, [sessionId, sessions])
 
   const handleSearch = async (e) => {
     e.preventDefault()
@@ -74,11 +81,11 @@ export default function ResultChecker() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Year</label>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Session</label>
               <select required value={sessionId}
                 onChange={(e) => setSessionId(e.target.value)}
                 className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm">
-                <option value="">Select Year</option>
+                <option value="">Select Session</option>
                 {sessions.map((s) => <option key={s._id || s.id} value={s._id || s.id}>{s.name}</option>)}
               </select>
             </div>
@@ -88,9 +95,7 @@ export default function ResultChecker() {
                 onChange={(e) => setTermId(e.target.value)}
                 className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] outline-none text-sm">
                 <option value="">Select Term</option>
-                {sessions.filter(s => sessionId === s.id).flatMap(s => s.terms).map((t) => (
-                  <option key={t._id || t.id} value={t._id || t.id}>{t.name}</option>
-                ))}
+                {terms.map((t) => <option key={t._id || t.id} value={t._id || t.id}>{t.name}</option>)}
               </select>
             </div>
           </div>
@@ -197,7 +202,7 @@ export default function ResultChecker() {
                 {result.nextResumptionDate && (
                   <div className="p-3 sm:p-4 bg-green-50 rounded-lg border border-green-200">
                     <h4 className="font-semibold text-sm text-[#1B5E20] mb-1">Next Resumption Date</h4>
-                    <p className="text-gray-700 text-sm font-bold">{new Date(result.nextResumptionDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    <p className="text-gray-700 text-sm font-bold">{new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                   </div>
                 )}
               </div>

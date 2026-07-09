@@ -21,6 +21,7 @@ export function SocketProvider({ children }) {
 
     socket.on('connect', () => setConnected(true))
     socket.on('disconnect', () => setConnected(false))
+    socket.on('connect_error', (err) => console.error('Socket connect error:', err.message))
 
     socketRef.current = socket
 

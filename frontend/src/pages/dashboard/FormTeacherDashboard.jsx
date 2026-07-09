@@ -17,6 +17,7 @@ export default function FormTeacherDashboard() {
   const [refreshing, setRefreshing] = useState(false)
   const [savingComment, setSavingComment] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [showSubmitModal, setShowSubmitModal] = useState(false)
   const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('ftActiveTab') || 'broadsheet')
   const broadsheetRef = useRef(null)
 
@@ -295,7 +296,7 @@ export default function FormTeacherDashboard() {
   }
 
   const handleSubmit = async () => {
-    if (!window.confirm('Submit broadsheet to exam officer? This will lock all scores.')) return
+    setShowSubmitModal(false)
     setSubmitting(true)
     try {
       await formTeacherAPI.submitBroadsheet({ sessionId: selectedSession, termId: selectedTerm })
@@ -752,14 +753,18 @@ export default function FormTeacherDashboard() {
                       <td className="p-2 text-center">
                         <input type="number" min="0"
                           value={attendanceData[row.student.id]?.present || ''}
-                          onChange={(e) => setAttendanceData(prev => ({ ...prev, [row.student.id]: { ...prev[row.student.id], present: e.target.value } }))}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const present = val === '' ? '' : Number(val);
+                            const absent = (present !== '' && daysOpen !== '' && Number(daysOpen) > 0) ? Math.max(0, Number(daysOpen) - present) : '';
+                            setAttendanceData(prev => ({ ...prev, [row.student.id]: { ...prev[row.student.id], present: val, absent } }))
+                          }}
                           className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm" placeholder="-" />
                       </td>
                       <td className="p-2 text-center">
-                        <input type="number" min="0"
+                        <input type="number" min="0" readOnly
                           value={attendanceData[row.student.id]?.absent || ''}
-                          onChange={(e) => setAttendanceData(prev => ({ ...prev, [row.student.id]: { ...prev[row.student.id], absent: e.target.value } }))}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded text-center text-sm" placeholder="-" />
+                          className="w-20 px-2 py-1 border border-gray-200 rounded text-center text-sm bg-gray-50 text-gray-500 cursor-not-allowed" placeholder="-" />
                       </td>
                     </tr>
                   ))}
@@ -1030,7 +1035,7 @@ export default function FormTeacherDashboard() {
                     All scores will be locked and the broadsheet will be sent to the exam officer for review.
                     Positions and averages will be recalculated before submission.
                   </p>
-                  <button onClick={handleSubmit} disabled={submitting}
+                  <button onClick={() => setShowSubmitModal(true)} disabled={submitting}
                     className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white px-8 py-2.5 rounded-lg font-semibold transition disabled:opacity-50 text-sm">
                     {submitting ? 'Submitting...' : 'Submit to Exam Officer'}
                   </button>
@@ -1040,6 +1045,51 @@ export default function FormTeacherDashboard() {
           ) : (
             <p className="text-gray-400 text-center py-8">No broadsheet data loaded.</p>
           )}
+        </div>
+      )}
+      {submitting && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/40">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mb-4"></div>
+          <p className="text-white font-semibold text-sm">Submitting broadsheet...</p>
+        </div>
+      )}
+      {showSubmitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowSubmitModal(false)}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="text-center">
+              <div className="mx-auto w-12 h-12 bg-[#1B5E20] rounded-full flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 mb-1">Submit to Exam Officer</h3>
+              <p className="text-sm text-gray-500 mb-4">This will lock all scores and send the broadsheet for review.</p>
+              <div className="grid grid-cols-3 gap-3 mb-5">
+                <div className="bg-green-50 rounded-lg p-3">
+                  <p className="text-lg font-bold text-green-700">{broadsheet?.students.length || 0}</p>
+                  <p className="text-xs text-green-600">Students</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <p className="text-lg font-bold text-blue-700">{broadsheet?.subjects.length || 0}</p>
+                  <p className="text-xs text-blue-600">Subjects</p>
+                </div>
+                <div className="bg-yellow-50 rounded-lg p-3">
+                  <p className="text-lg font-bold text-yellow-700">{broadsheet?.students.filter(s => s.resultId).length || 0}</p>
+                  <p className="text-xs text-yellow-600">With Scores</p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setShowSubmitModal(false)}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+                  Cancel
+                </button>
+                <button onClick={handleSubmit}
+                  className="flex-1 px-4 py-2.5 bg-[#1B5E20] hover:bg-[#2E7D32] text-white rounded-lg text-sm font-semibold transition cursor-pointer">
+                  Confirm Submit
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
       {deleteConfirm.show && (

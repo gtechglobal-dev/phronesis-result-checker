@@ -12,8 +12,8 @@ export default function Landing() {
                 <span className="text-yellow-400">Phronesis</span>{' '}
                 Int'l School
               </h1>
-              <p className="mt-3 text-xs sm:text-sm text-yellow-300 font-medium">
-                30A & 30B NTA Road, Opp. Govt. Girls School, R/Okuta by 1 Okoa Str., Beside St. France Cath. Church, Port-Harcourt
+              <p className="mt-4 text-lg sm:text-xl text-yellow-400 font-bold">
+                Student's Result Portal
               </p>
               <p className="mt-2 text-xs sm:text-sm text-yellow-200">
                 &#9742; 0818-175-9399, 0813-676-7214, 0803-875-1506
@@ -29,12 +29,6 @@ export default function Landing() {
                   className="bg-yellow-500 hover:bg-yellow-600 text-[#1B5E20] font-semibold px-6 sm:px-8 py-3 rounded-lg transition shadow-lg text-center"
                 >
                   Check Result
-                </Link>
-                <Link
-                  to="/signup"
-                  className="border-2 border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-[#1B5E20] font-semibold px-6 sm:px-8 py-3 rounded-lg transition text-center"
-                >
-                  Get Started
                 </Link>
               </div>
             </div>

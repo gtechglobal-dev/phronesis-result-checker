@@ -1,14 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   classAPI,
-  studentAPI,
   resultAPI,
   authAPI,
   pinAPI,
 } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
-import { useSocketListener, useSocket } from '../../context/SocketContext'
+import { useSocketListener } from '../../context/SocketContext'
 
 const SUBJECTS_LIST = [
   "ENGLISH STUDIES", "MATHEMATICS", "GENERAL MATHEMATICS", "PHONICS",
@@ -61,20 +60,26 @@ export default function ExamOfficerDashboard() {
   const [classes, setClasses] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [message, setMessage] = useState(null);
-  const [resultLoading, setResultLoading] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [termLoading, setTermLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(null);
   const [teacherLoading, setTeacherLoading] = useState(false);
   const [withholdLoading, setWithholdLoading] = useState(null);
 
-  const [pendingResults, setPendingResults] = useState([]);
-  const [pendingSession, setPendingSession] = useState("");
-  const [pendingTerm, setPendingTerm] = useState("");
-  const [pendingClass, setPendingClass] = useState("");
+  const [pendingSummary, setPendingSummary] = useState([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [pendingClasses, setPendingClasses] = useState([]);
+  const [pendingBroadsheet, setPendingBroadsheet] = useState(null);
+  const [pendingLevel, setPendingLevel] = useState('summary');
+  const [pendingSid, setPendingSid] = useState(null);
+  const [pendingTid, setPendingTid] = useState(null);
+  const [pendingSname, setPendingSname] = useState('');
+  const [pendingTname, setPendingTname] = useState('');
   const [pendingLoading, setPendingLoading] = useState(false);
-  const [principalCommentText, setPrincipalCommentText] = useState({});
-  const [principalSaving, setPrincipalSaving] = useState(null);
+  const [editModalStudent, setEditModalStudent] = useState(null);
+  const [editScores, setEditScores] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const [resultForm, setResultForm] = useState({
     studentId: "",
@@ -109,17 +114,34 @@ export default function ExamOfficerDashboard() {
     show: false,
     title: "",
     message: "",
+    confirmText: "Confirm",
+    cancelText: "Cancel",
     onConfirm: null,
   });
   const [withholdList, setWithholdList] = useState([]);
   const [withholdSession, setWithholdSession] = useState("");
   const [withholdTerm, setWithholdTerm] = useState("");
   const [withholdClass, setWithholdClass] = useState("");
+  const [withholdModal, setWithholdModal] = useState(null);
+  const [withholdChosenReason, setWithholdChosenReason] = useState('');
+  const [withholdCustomReason, setWithholdCustomReason] = useState('');
+  const [withheldLoading, setWithheldLoading] = useState(false);
 
-  const [manageResults, setManageResults] = useState([]);
-  const [manageLoading, setManageLoading] = useState(false);
-  const [manageGroup, setManageGroup] = useState(null);
-  const [manageClass, setManageClass] = useState(null);
+  const WITHHOLD_REASONS = [
+    'Unpaid fees. Please call the school office for further negotiation.',
+    'Exam Malpractice. Please contact the school office.',
+    'Behavioural misconduct towards school authorities. Please contact the school.'
+  ]
+
+  const [archiveSessions, setArchiveSessions] = useState([]);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveLevel, setArchiveLevel] = useState('sessions');
+  const [archiveSid, setArchiveSid] = useState(null);
+  const [archiveTid, setArchiveTid] = useState(null);
+  const [archiveTname, setArchiveTname] = useState('');
+  const [archiveSname, setArchiveSname] = useState('');
+  const [archiveClasses, setArchiveClasses] = useState([]);
+  const [archiveBroadsheet, setArchiveBroadsheet] = useState(null);
 
   const [classRegForm, setClassRegForm] = useState({
     name: "",
@@ -140,14 +162,19 @@ export default function ExamOfficerDashboard() {
 
   const refreshCurrentTab = useCallback(() => {
     if (activeTab === 'sessions') { loadClasses(); loadSessions() }
-    else if (activeTab === 'results') loadManageResults()
-    else if (activeTab === 'pending' && pendingSession && pendingTerm) loadPendingResults()
+    else if (activeTab === 'results') loadArchiveSessions()
+    else if (activeTab === 'pending') loadPendingSummary()
     else if (activeTab === 'pins') loadPins()
-  }, [activeTab, pendingSession, pendingTerm])
+  }, [activeTab])
+
+  const refreshWithheld = useCallback(() => {
+    loadWithheldResults()
+  }, [])
 
   useSocketListener('entity:updated', refreshCurrentTab)
   useSocketListener('result:status', refreshCurrentTab)
   useSocketListener('result:withheld', refreshCurrentTab)
+  useSocketListener('result:withheld', refreshWithheld)
   useSocketListener('pin:generated', refreshCurrentTab)
   useSocketListener('pin:revoked', refreshCurrentTab)
 
@@ -158,13 +185,15 @@ export default function ExamOfficerDashboard() {
     { id: "subjects-reg", label: "Register Subjects" },
     { id: "teachers", label: "Form Teachers" },
     { id: "pending", label: "Pending" },
-    { id: "withhold", label: "Withhold" },
+    { id: "withhold", label: "Withheld Results" },
     { id: "pins", label: "Generate PIN" },
   ];
 
   useEffect(() => {
     loadClasses();
     loadSessions();
+    loadPendingSummary();
+    loadWithheldResults();
   }, []);
 
   const loadClasses = async () => {
@@ -183,44 +212,67 @@ export default function ExamOfficerDashboard() {
       console.error(err);
     }
   };
-  const loadManageResults = async () => {
-    setManageLoading(true);
+  const loadArchiveSessions = async () => {
+    setArchiveLoading(true);
     try {
-      const res = await resultAPI.getManageResults();
-      setManageResults(res.data);
+      const res = await resultAPI.getArchiveSessions();
+      setArchiveSessions(res.data);
     } catch (err) {
       console.error(err);
     } finally {
-      setManageLoading(false);
+      setArchiveLoading(false);
     }
   };
 
-  const loadWithholdResults = async () => {
-    if (!withholdClass || !withholdSession || !withholdTerm) return;
+  const loadArchiveClasses = async (sessionId, termId) => {
+    setArchiveLoading(true);
     try {
-      const res = await resultAPI.getFormTeacherResults({
-        classId: withholdClass,
-        sessionId: withholdSession,
-        termId: withholdTerm,
-      });
-      if (res.data.results) setWithholdList(res.data.results);
+      const res = await resultAPI.getArchiveClasses(sessionId, termId);
+      setArchiveClasses(res.data);
+      setArchiveLevel('classes');
     } catch (err) {
       console.error(err);
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const loadArchiveBroadsheet = async (sessionId, termId, classId) => {
+    setArchiveLoading(true);
+    try {
+      const res = await resultAPI.getArchiveBroadsheet(sessionId, termId, classId);
+      setArchiveBroadsheet(res.data);
+      setArchiveLevel('broadsheet');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const loadWithheldResults = async () => {
+    setWithheldLoading(true);
+    try {
+      const res = await resultAPI.getWithheldResults();
+      setWithholdList(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setWithheldLoading(false);
     }
   };
 
   useEffect(() => {
-    if (withholdClass && withholdSession && withholdTerm) loadWithholdResults();
-  }, [withholdClass, withholdSession, withholdTerm]);
+    if (activeTab === 'withhold') loadWithheldResults();
+  }, [activeTab]);
 
-  const loadPendingResults = async () => {
-    if (!pendingSession || !pendingTerm) return;
+  const loadPendingSummary = async () => {
     setPendingLoading(true);
     try {
-      const params = { sessionId: pendingSession, termId: pendingTerm };
-      if (pendingClass) params.classId = pendingClass;
-      const res = await resultAPI.getPendingResults(params);
-      setPendingResults(res.data);
+      const res = await resultAPI.getPendingSummary();
+      setPendingSummary(res.data);
+      const count = res.data.reduce((sum, s) => sum + s.terms.reduce((ts, t) => ts + t.classCount, 0), 0);
+      setPendingCount(count);
     } catch (err) {
       console.error(err);
     } finally {
@@ -228,21 +280,46 @@ export default function ExamOfficerDashboard() {
     }
   };
 
-  const handleSavePrincipalComment = async (resultId) => {
-    setPrincipalSaving(resultId);
+  const loadPendingClasses = async (sessionId, termId) => {
+    if (!sessionId || !termId) {
+      setMessage({ type: 'error', text: 'Missing session or term' });
+      return;
+    }
+    setPendingLoading(true);
     try {
-      await resultAPI.updatePrincipalComment(resultId, {
-        principalComment: principalCommentText[resultId] || "",
-      });
-      setMessage({ type: "success", text: "Principal comment saved" });
-      loadPendingResults();
+      const res = await resultAPI.getPendingResults({ sessionId, termId });
+      if (!Array.isArray(res.data)) throw new Error('Unexpected response format');
+      const classMap = {};
+      for (const r of res.data) {
+        const cid = r.class?._id || r.class;
+        if (!cid) continue;
+        if (!classMap[cid]) classMap[cid] = { _id: cid, name: r.class?.name || 'Unknown', studentCount: 0 };
+        classMap[cid].studentCount++;
+      }
+      setPendingClasses(Object.values(classMap));
+      setPendingLevel('classes');
     } catch (err) {
-      setMessage({
-        type: "error",
-        text: err.response?.data?.message || "Server error",
-      });
+      setMessage({ type: 'error', text: err.response?.data?.message || err.message || 'Failed to load classes' });
     } finally {
-      setPrincipalSaving(null);
+      setPendingLoading(false);
+    }
+  };
+
+  const loadPendingBroadsheet = async (sessionId, termId, classId) => {
+    if (!sessionId || !termId || !classId) {
+      setMessage({ type: 'error', text: 'Missing session, term, or class' });
+      return;
+    }
+    setPendingLoading(true);
+    try {
+      const res = await resultAPI.getPendingBroadsheet(sessionId, termId, classId);
+      if (!res.data.class) throw new Error('Class not found');
+      setPendingBroadsheet(res.data);
+      setPendingLevel('broadsheet');
+    } catch (err) {
+      setMessage({ type: 'error', text: err.response?.data?.message || err.message || 'Failed to load broadsheet' });
+    } finally {
+      setPendingLoading(false);
     }
   };
 
@@ -337,12 +414,12 @@ export default function ExamOfficerDashboard() {
     }
   };
 
-  const handleWithhold = async (resultId, withheld) => {
+  const handleWithhold = async (resultId, withheld, reason) => {
     setWithholdLoading(resultId);
     try {
-      await resultAPI.toggleWithhold(resultId, { withheld });
-      setMessage(withheld ? "Result withheld" : "Result released");
-      loadWithholdResults();
+      await resultAPI.toggleWithhold(resultId, { withheld, reason });
+      setMessage({ type: 'success', text: withheld ? 'Result withheld' : 'Result released' });
+      loadWithheldResults();
     } catch (err) {
       setMessage({
         type: "error",
@@ -409,7 +486,7 @@ export default function ExamOfficerDashboard() {
 
   useEffect(() => {
     if (activeTab === "pins") loadPins();
-    if (activeTab === "results") loadManageResults();
+    if (activeTab === "results") loadArchiveSessions();
     if (activeTab === "classes-reg" || activeTab === "subjects-reg")
       loadClasses();
 
@@ -447,13 +524,23 @@ export default function ExamOfficerDashboard() {
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
-            className={`shrink-0 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition whitespace-nowrap ${
+            className={`shrink-0 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition whitespace-nowrap relative ${
               activeTab === t.id
                 ? "bg-[#1B5E20] text-white"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
           >
             {t.label}
+            {t.id === 'pending' && pendingCount > 0 && (
+              <span className="inline-flex ml-1.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] items-center justify-center rounded-full px-1 shadow-sm">
+                {pendingCount > 99 ? '99+' : pendingCount}
+              </span>
+            )}
+            {t.id === 'withhold' && withholdList.length > 0 && (
+              <span className="inline-flex ml-1.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] items-center justify-center rounded-full px-1 shadow-sm">
+                {withholdList.length > 99 ? '99+' : withholdList.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -757,52 +844,58 @@ export default function ExamOfficerDashboard() {
 
       {confirmModal.show && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={() =>
             setConfirmModal({
               show: false,
               message: "",
+              confirmText: "Confirm",
+              cancelText: "Cancel",
               onConfirm: null,
               title: "",
             })
           }
         >
           <div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-red-100 flex items-center justify-center">
-              <svg
-                className="w-6 h-6 text-red-500"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-                />
-              </svg>
+            <div className="px-6 pt-6 pb-4 text-center">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center shadow-inner">
+                <svg
+                  className="w-7 h-7 text-red-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+                  />
+                </svg>
+              </div>
+              <h4 className="text-lg font-bold text-gray-900 mb-2">
+                {confirmModal.title}
+              </h4>
+              <p className="text-sm text-gray-500 leading-relaxed">{confirmModal.message}</p>
             </div>
-            <h4 className="font-semibold text-base text-gray-800 mb-1">
-              {confirmModal.title}
-            </h4>
-            <p className="text-sm text-gray-500 mb-5">{confirmModal.message}</p>
-            <div className="flex gap-3">
+            <div className="flex gap-3 px-6 pb-6">
               <button
                 onClick={() =>
                   setConfirmModal({
                     show: false,
                     message: "",
+                    confirmText: "Confirm",
+                    cancelText: "Cancel",
                     onConfirm: null,
                     title: "",
                   })
                 }
-                className="flex-1 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+                className="flex-1 py-2.5 rounded-xl border-2 border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-[0.97]"
               >
-                Cancel
+                {confirmModal.cancelText || "Cancel"}
               </button>
               <button
                 onClick={() => {
@@ -810,13 +903,15 @@ export default function ExamOfficerDashboard() {
                   setConfirmModal({
                     show: false,
                     message: "",
+                    confirmText: "Confirm",
+                    cancelText: "Cancel",
                     onConfirm: null,
                     title: "",
                   });
                 }}
-                className="flex-1 py-2.5 rounded-lg bg-red-600 text-sm font-medium text-white hover:bg-red-700 transition"
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-red-500 text-sm font-semibold text-white shadow-lg shadow-red-200 hover:shadow-red-300 hover:from-red-700 hover:to-red-600 transition-all active:scale-[0.97]"
               >
-                Delete
+                {confirmModal.confirmText || "Confirm"}
               </button>
             </div>
           </div>
@@ -826,264 +921,146 @@ export default function ExamOfficerDashboard() {
       {activeTab === "results" && (
         <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
           <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">
-            Manage Results
+            {archiveLevel === 'sessions' ? 'Archived Results' : archiveLevel === 'classes' ? `${archiveSname} - ${archiveTname}` : `${archiveSname} - ${archiveTname} > Broadsheet`}
           </h3>
-          {manageLoading ? (
-            <div className="text-center py-8">
-              <Spinner />
-            </div>
-          ) : !manageGroup ? (
-            <>
-              {manageResults.length === 0 ? (
-                <p className="text-gray-400 text-sm text-center py-6">
-                  No approved results yet. Approve results from the Pending tab
-                  first.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {(() => {
-                    const groups = {};
-                    manageResults.forEach((r) => {
-                      const key = `${r.session?._id || r.session}|${r.term?._id || r.term}`;
-                      if (!groups[key])
-                        groups[key] = {
-                          session: r.session,
-                          term: r.term,
-                          classes: new Set(),
-                          results: [],
-                        };
-                      groups[key].classes.add(r.class?._id);
-                      groups[key].results.push(r);
-                    });
-                    return Object.values(groups).map((g) => {
-                      const classCount = g.classes.size;
-                      const published = g.results.filter(
-                        (r) => r.status === "PUBLISHED",
-                      ).length;
-                      return (
-                        <button
-                          key={`${g.session?._id}-${g.term?._id}`}
-                          onClick={() => setManageGroup(g)}
-                          className="w-full text-left border rounded-lg p-3 hover:bg-gray-50 transition flex items-center justify-between"
-                        >
-                          <div>
-                            <span className="font-medium text-sm">
-                              {g.session?.name} - {g.term?.name}
-                            </span>
-                            <span className="text-xs text-gray-400 ml-2">
-                              {classCount} class{classCount > 1 ? "es" : ""},{" "}
-                              {g.results.length} student
-                              {g.results.length > 1 ? "s" : ""}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs">
-                            <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded">
-                              {published} published
-                            </span>
-                            <span className="text-gray-400">&rarr;</span>
-                          </div>
-                        </button>
-                      );
-                    });
-                  })()}
-                </div>
-              )}
-            </>
-          ) : !manageClass ? (
-            <div>
-              <button
-                onClick={() => setManageGroup(null)}
-                className="text-xs text-[#1B5E20] hover:text-yellow-600 font-medium mb-3 flex items-center gap-1"
-              >
-                &larr; Back to Sessions
-              </button>
-              <p className="font-semibold text-sm text-gray-700 mb-3">
-                {manageGroup.session?.name} - {manageGroup.term?.name}
-              </p>
+
+          {archiveLevel !== 'sessions' && (
+            <button onClick={() => {
+              if (archiveLevel === 'broadsheet') { setArchiveLevel('classes'); setArchiveBroadsheet(null) }
+              else { setArchiveLevel('sessions'); setArchiveClasses([]); setArchiveSid(null); setArchiveTid(null) }
+            }} className="text-xs text-[#1B5E20] hover:text-yellow-600 font-medium mb-3 flex items-center gap-1">
+              &larr; Back to {archiveLevel === 'broadsheet' ? 'Classes' : 'Sessions'}
+            </button>
+          )}
+
+          {archiveLoading ? (
+            <div className="text-center py-8"><Spinner /></div>
+          ) : archiveLevel === 'sessions' ? (
+            archiveSessions.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center py-6">No results found. Results appear here once they are created.</p>
+            ) : (
               <div className="space-y-2">
-                {(() => {
-                  const classMap = {};
-                  manageGroup.results.forEach((r) => {
-                    const cid = r.class?._id;
-                    if (!classMap[cid])
-                      classMap[cid] = { class: r.class, results: [] };
-                    classMap[cid].results.push(r);
-                  });
-                  return Object.values(classMap).map((cg) => {
-                    const withheld = cg.results.filter(
-                      (r) => r.withheld,
-                    ).length;
-                    const notPublished = cg.results.filter(
-                      (r) => r.status === "APPROVED",
-                    ).length;
-                    return (
-                      <div
-                        key={cg.class?._id}
-                        className="border rounded-lg p-3"
-                      >
-                        <div className="flex items-center justify-between">
-                          <button
-                            onClick={() => setManageClass(cg)}
-                            className="font-medium text-sm hover:text-[#1B5E20] text-left"
-                          >
-                            {cg.class?.name}
-                          </button>
-                          <div className="flex items-center gap-2 text-xs">
-                            <span className="text-gray-500">
-                              {cg.results.length} students
-                            </span>
-                            {withheld > 0 && (
-                              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded">
-                                {withheld} withheld
-                              </span>
-                            )}
-                            {notPublished > 0 && (
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    for (const r of cg.results) {
-                                      if (r.status === "APPROVED")
-                                        await resultAPI.updateStatus(
-                                          r.id || r._id,
-                                          { status: "PUBLISHED" },
-                                        );
-                                    }
-                                    loadManageResults();
-                                  } catch (err) {
-                                    setMessage({
-                                      type: "error",
-                                      text: "Failed to publish",
-                                    });
-                                  }
-                                }}
-                                className="bg-[#1B5E20] text-white px-3 py-1 rounded hover:bg-[#2E7D32] transition"
-                              >
-                                Publish All
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
+                {archiveSessions.map(s => (
+                  <div key={s._id} className="border rounded-lg p-3">
+                    <p className="font-semibold text-sm text-gray-800 mb-2">{s.name}</p>
+                    <div className="space-y-1">
+                      {s.terms.map(t => (
+                        <button key={t._id} onClick={() => { setArchiveSid(s._id); setArchiveTid(t._id); setArchiveSname(s.name); setArchiveTname(t.name); loadArchiveClasses(s._id, t._id) }}
+                          className="w-full text-left px-3 py-2 rounded hover:bg-gray-50 transition flex items-center justify-between text-sm">
+                          <span className="font-medium">{t.name}</span>
+                          <span className="text-xs text-gray-400">{t.classCount} class{t.classCount !== 1 ? 'es' : ''}, {t.studentCount} student{t.studentCount !== 1 ? 's' : ''}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
+            )
+          ) : archiveLevel === 'classes' ? (
+            <div className="space-y-2">
+              {archiveClasses.map(c => (
+                <button key={c._id} onClick={() => loadArchiveBroadsheet(archiveSid, archiveTid, c._id)}
+                  className="w-full text-left border rounded-lg p-3 hover:bg-gray-50 transition flex items-center justify-between">
+                  <div>
+                    <span className="font-medium text-sm">{c.name}</span>
+                    <span className="text-xs text-gray-400 ml-2">{c.studentCount} students</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    {c.publishedCount > 0 && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded">{c.publishedCount} published</span>}
+                    <span className="text-gray-400">&rarr;</span>
+                  </div>
+                </button>
+              ))}
             </div>
           ) : (
-            <div>
-              <button
-                onClick={() => setManageClass(null)}
-                className="text-xs text-[#1B5E20] hover:text-yellow-600 font-medium mb-3 flex items-center gap-1"
-              >
-                &larr; Back to Classes
-              </button>
-              <p className="font-semibold text-sm text-gray-700 mb-3">
-                {manageGroup.session?.name} - {manageGroup.term?.name} &gt;{" "}
-                {manageClass.class?.name}
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs sm:text-sm">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      <th className="text-left p-2 sm:p-3 font-medium text-gray-600">
-                        Student
-                      </th>
-                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
-                        Total
-                      </th>
-                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
-                        Average
-                      </th>
-                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
-                        Position
-                      </th>
-                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
-                        Status
-                      </th>
-                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
-                        Withheld
-                      </th>
-                      <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
-                        Action
-                      </th>
+            <div className="overflow-auto max-h-[calc(100vh-320px)]">
+              {archiveBroadsheet ? (
+                <table className="w-full text-xs sm:text-sm border-collapse">
+                  <thead className="sticky top-0 z-20">
+                    <tr className="bg-[#1B5E20] text-white">
+                      <th className="p-2 text-center font-semibold text-xs sticky left-0 bg-[#1B5E20] z-30" rowSpan="2">S/N</th>
+                      <th className="p-2 text-left font-semibold text-xs sticky left-[40px] bg-[#1B5E20] z-30" rowSpan="2">STUDENT'S NAMES</th>
+                      <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">EXAM NO</th>
+                      <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">G</th>
+                      {archiveBroadsheet.subjects.map(s => (
+                        <th key={s._id || s.id} className="p-1 text-center font-semibold text-xs border-r border-green-800 bg-[#1B5E20]" colSpan="4">{s.name}</th>
+                      ))}
+                      <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">GRAND TOTAL</th>
+                      <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">AVERAGE</th>
+                      <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">POSITION</th>
+                      <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">TEACHER'S<br/>COMMENT</th>
+                      <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">PRINCIPAL'S<br/>REMARK</th>
+                      <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">DAYS<br/>OPEN</th>
+                      <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">ATTEND</th>
+                      <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">ABSENT</th>
+                      <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2" colSpan="2">ACTION</th>
+                    </tr>
+                    <tr className="bg-[#E8F5E9] text-gray-700 border-b border-gray-300">
+                      {archiveBroadsheet.subjects.map(s => (
+                        <React.Fragment key={s._id || s.id}>
+                          <th className="p-1 text-center font-semibold text-[11px] border-r border-gray-200 bg-[#E8F5E9]">CA1(20)</th>
+                          <th className="p-1 text-center font-semibold text-[11px] border-r border-gray-200 bg-[#E8F5E9]">CA2(20)</th>
+                          <th className="p-1 text-center font-semibold text-[11px] border-r border-gray-200 bg-[#E8F5E9]">EXAM(60)</th>
+                          <th className="p-1 text-center font-semibold text-[11px] border-r border-gray-200 bg-[#E8F5E9]">TOTAL(100)</th>
+                        </React.Fragment>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {manageClass.results.map((r) => (
-                      <tr
-                        key={r.id || r._id}
-                        className="border-t hover:bg-gray-50"
-                      >
-                        <td className="p-2 sm:p-3 font-medium whitespace-nowrap">
-                          {r.student?.firstName} {r.student?.lastName}
-                        </td>
-                        <td className="p-2 sm:p-3 text-center">
-                          {r.totalScore}
-                        </td>
-                        <td className="p-2 sm:p-3 text-center">{r.average}</td>
-                        <td className="p-2 sm:p-3 text-center">
-                          {r.position || "-"}
-                        </td>
-                        <td className="p-2 sm:p-3 text-center">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${r.status === "PUBLISHED" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}
-                          >
-                            {r.status}
-                          </span>
-                        </td>
-                        <td className="p-2 sm:p-3 text-center">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${r.withheld ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-500"}`}
-                          >
-                            {r.withheld ? "Yes" : "No"}
-                          </span>
-                        </td>
-                        <td className="p-2 sm:p-3 text-center">
-                          <div className="flex gap-1 justify-center">
-                            {r.status === "APPROVED" && (
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    await resultAPI.updateStatus(
-                                      r.id || r._id,
-                                      { status: "PUBLISHED" },
-                                    );
-                                    loadManageResults();
-                                  } catch (err) {
-                                    setMessage({
-                                      type: "error",
-                                      text: "Failed to publish",
-                                    });
-                                  }
-                                }}
-                                className="text-[10px] px-2 py-1 rounded bg-[#1B5E20] text-white font-medium hover:bg-[#2E7D32] transition"
-                              >
-                                Publish
-                              </button>
-                            )}
-                            <button
-                              onClick={async () => {
-                                try {
-                                  await resultAPI.toggleWithhold(
-                                    r.id || r._id,
-                                    { withheld: !r.withheld },
-                                  );
-                                  loadManageResults();
-                                } catch (err) {
-                                  setMessage({ type: "error", text: "Failed" });
+                    {archiveBroadsheet.students.map((row, i) => (
+                      <tr key={row.student.id} className={`border-t ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-yellow-50`}>
+                        <td className="p-2 text-center font-bold sticky left-0 bg-inherit z-10">{i + 1}</td>
+                          <td className="p-2 font-medium whitespace-nowrap sticky left-[40px] bg-inherit z-10">{row.student.lastName} {row.student.firstName}</td>
+                          <td className="p-2 text-center font-mono text-xs">{row.student.regNo || '-'}</td>
+                          <td className="p-2 text-center font-bold">{row.student.gender || '-'}</td>
+                        {archiveBroadsheet.subjects.map(s => {
+                          const d = row.details[s._id || s.id]
+                          return d ? (
+                            <React.Fragment key={s._id || s.id}>
+                              <td className="p-1 text-center">{d.ca1}</td>
+                              <td className="p-1 text-center">{d.ca2}</td>
+                              <td className="p-1 text-center">{d.exam}</td>
+                              <td className={`p-1 text-center font-bold border-r border-gray-300 ${d.total >= 80 ? 'text-green-700' : d.total >= 60 ? 'text-blue-700' : 'text-red-700'}`}>{d.total}</td>
+                            </React.Fragment>
+                          ) : (
+                            <React.Fragment key={s._id || s.id}>
+                              <td className="p-1 text-center text-gray-300">-</td>
+                              <td className="p-1 text-center text-gray-300">-</td>
+                              <td className="p-1 text-center text-gray-300">-</td>
+                              <td className="p-1 text-center text-gray-300 border-r border-gray-300">-</td>
+                            </React.Fragment>
+                          )
+                        })}
+                        <td className="p-2 text-center font-bold">{row.totalScore}</td>
+                        <td className="p-2 text-center">{row.average}</td>
+                        <td className="p-2 text-center font-bold">{row.position ? row.position + (() => { const s = ['th','st','nd','rd']; const v = row.position % 100; return s[(v - 20) % 10] || s[v] || s[0] })() : '-'}</td>
+                            <td className="p-2 max-w-[120px] text-[11px] text-gray-600">{row.teacherComment || row.autoTeacherComment || '-'}</td>
+                            <td className="p-2 max-w-[140px] text-[11px]">{row.principalComment || row.autoPrincipalRemark || '-'}</td>
+                            <td className="p-2 text-center">{archiveBroadsheet.daysOpen ?? '-'}</td>
+                            <td className="p-2 text-center">{row.daysPresent ?? '-'}</td>
+                            <td className="p-2 text-center">{row.daysAbsent ?? '-'}</td>
+                            <td className="p-2 text-center">
+                              <button onClick={() => {
+                                if (!row.resultId) return setMessage({ type: 'error', text: 'No result ID for this student' });
+                                const scores = {}
+                                for (const sub of archiveBroadsheet.subjects) {
+                                  const d = row.details[sub._id || sub.id]
+                                  scores[sub._id || sub.id] = d ? { ca1: d.ca1, ca2: d.ca2, exam: d.exam } : { ca1: 0, ca2: 0, exam: 0 }
                                 }
-                              }}
-                              className={`text-[10px] px-2 py-1 rounded font-medium text-white transition ${r.withheld ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}`}
-                            >
-                              {r.withheld ? "Release" : "Withhold"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                                setEditScores(scores)
+                                setEditModalStudent(row)
+                              }} className="text-blue-600 hover:text-blue-800 text-[11px] font-medium mr-2">Edit Result</button>
+                            </td>
+                            <td className="p-2 text-center">
+                              <button onClick={() => { if (!row.withheld) { if (!row.resultId) return setMessage({ type: 'error', text: 'No result ID for this student' }); setWithholdModal(row); setWithholdChosenReason(''); setWithholdCustomReason('') } }} disabled={row.withheld} className={`text-[11px] font-medium ${row.withheld ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-800'}`}>{row.withheld ? 'Withheld' : 'Withhold'}</button>
+                            </td>
+                          </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
+              ) : (
+                <p className="text-gray-400 text-center py-8">No broadsheet data.</p>
+              )}
             </div>
           )}
         </div>
@@ -1546,255 +1523,255 @@ export default function ExamOfficerDashboard() {
       {activeTab === "pending" && (
         <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
           <h3 className="font-bold text-lg text-[#1B5E20] mb-4">
-            Pending Results (Submitted by Form Teachers)
+            {pendingLevel === 'summary' ? 'Pending Results (Submitted by Form Teachers)' : pendingLevel === 'classes' ? `${pendingSname} - ${pendingTname}` : `${pendingSname} - ${pendingTname} > ${pendingBroadsheet?.class?.name || 'Broadsheet'}`}
           </h3>
-          <div className="flex flex-wrap gap-2 sm:gap-3 mb-4">
-            <select
-              value={pendingSession}
-              onChange={(e) => setPendingSession(e.target.value)}
-              className="px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="">Select Session</option>
-              {sessions.map((s) => (
-                <option key={s._id} value={s._id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={pendingTerm}
-              onChange={(e) => setPendingTerm(e.target.value)}
-              className="px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="">Select Term</option>
-              {sessions
-                .filter((s) => s._id === pendingSession)
-                .flatMap((s) => s.terms)
-                .map((t) => (
-                  <option key={t._id} value={t._id}>
-                    {t.name}
-                  </option>
+
+          {pendingLevel !== 'summary' && (
+            <button onClick={() => {
+              if (pendingLevel === 'broadsheet') { setPendingLevel('classes'); setPendingBroadsheet(null) }
+              else { setPendingLevel('summary'); setPendingClasses([]); setPendingSid(null); setPendingTid(null) }
+            }} className="text-xs text-[#1B5E20] hover:text-yellow-600 font-medium mb-3 flex items-center gap-1">
+              &larr; Back to {pendingLevel === 'broadsheet' ? 'Classes' : 'Sessions'}
+            </button>
+          )}
+
+          {pendingLoading ? (
+            <div className="text-center py-8"><Spinner /></div>
+          ) : pendingLevel === 'summary' ? (
+            pendingSummary.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center py-6">No pending results. Form teachers have not submitted any broadsheets yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {pendingSummary.map(s => (
+                  <div key={s._id} className="border rounded-lg p-3">
+                    <p className="font-semibold text-sm text-gray-800 mb-2">{s.name}</p>
+                    <div className="space-y-1">
+                      {s.terms.map(t => (
+                        <button key={t._id} onClick={() => { setPendingSid(s._id); setPendingTid(t._id); setPendingSname(s.name); setPendingTname(t.name); loadPendingClasses(s._id, t._id) }}
+                          className="w-full text-left px-3 py-2 rounded hover:bg-gray-50 transition flex items-center justify-between text-sm">
+                          <span className="font-medium">{t.name}</span>
+                          <span className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400">{t.classCount} class{t.classCount !== 1 ? 'es' : ''}, {t.studentCount} student{t.studentCount !== 1 ? 's' : ''}</span>
+                            {t.studentCount > 0 && <span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-0.5 rounded-full">{t.studentCount} pending</span>}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
-            </select>
-            <select
-              value={pendingClass}
-              onChange={(e) => setPendingClass(e.target.value)}
-              className="px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="">All Classes</option>
-              {classes.map((c) => (
-                <option key={c._id || c.id} value={c._id || c.id}>
-                  {c.name}
-                </option>
+              </div>
+            )
+          ) : pendingLevel === 'classes' ? (
+            <div className="space-y-2">
+              {pendingClasses.map(c => (
+                <button key={c._id} onClick={() => loadPendingBroadsheet(pendingSid, pendingTid, c._id)}
+                  className="w-full text-left border rounded-lg p-3 hover:bg-gray-50 transition flex items-center justify-between">
+                  <span className="font-medium text-sm">{c.name}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400">{c.studentCount} students</span>
+                    <span className="text-gray-400">&rarr;</span>
+                  </span>
+                </button>
               ))}
-            </select>
-            <button
-              onClick={loadPendingResults}
-              disabled={!pendingSession || !pendingTerm || pendingLoading}
-              className="bg-[#1B5E20] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#2E7D32] transition disabled:opacity-50"
-            >
-              {pendingLoading ? "Loading..." : "Load"}
+            </div>
+          ) : (
+            <div>
+              {pendingBroadsheet ? (
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm text-gray-500">{pendingBroadsheet.students.length} student(s)</p>
+                    <button onClick={async () => {
+                      setConfirmModal({
+                        show: true,
+                        title: 'Publish All Results?',
+                        message: `Publish all results for ${pendingBroadsheet.class.name}? Students will be able to check their results online immediately.`,
+                        confirmText: 'Publish',
+                        cancelText: 'Cancel',
+                        onConfirm: async () => {
+                          setPublishing(true);
+                          try {
+                            const res = await resultAPI.publishClassResults(pendingSid, pendingTid, pendingBroadsheet.class.id);
+                            setMessage({ type: 'success', text: res.data.message || 'Results published successfully' });
+                            setPendingLevel('summary');
+                            setPendingBroadsheet(null);
+                            setPendingClasses([]);
+                            setPendingSid(null);
+                            setPendingTid(null);
+                            loadPendingSummary();
+                            loadArchiveSessions();
+                          } catch (err) {
+                            setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to publish' });
+                          } finally {
+                            setPublishing(false);
+                          }
+                        }
+                      });
+                    }}
+                      disabled={publishing}
+                      className="bg-[#1B5E20] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#2E7D32] transition disabled:opacity-50 flex items-center gap-2">
+                      {publishing && <Spinner small />}
+                      {publishing ? 'Publishing...' : 'Publish Results'}
+                    </button>
+                  </div>
+                  <div className="overflow-auto max-h-[calc(100vh-380px)]">
+                    <table className="w-full text-xs sm:text-sm border-collapse">
+                      <thead className="sticky top-0 z-20">
+                        <tr className="bg-[#1B5E20] text-white">
+                          <th className="p-2 text-center font-semibold text-xs sticky left-0 bg-[#1B5E20] z-30" rowSpan="2">S/N</th>
+                          <th className="p-2 text-left font-semibold text-xs sticky left-[40px] bg-[#1B5E20] z-30" rowSpan="2">STUDENT'S NAMES</th>
+                          <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">EXAM NO</th>
+                          <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">G</th>
+                          {pendingBroadsheet.subjects.map(s => (
+                            <th key={s._id || s.id} className="p-1 text-center font-semibold text-xs border-r border-green-800 bg-[#1B5E20]" colSpan="4">{s.name}</th>
+                          ))}
+                          <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">GRAND TOTAL</th>
+                          <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">AVERAGE</th>
+                          <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">POSITION</th>
+                          <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">TEACHER'S<br/>COMMENT</th>
+                          <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">PRINCIPAL'S<br/>REMARK</th>
+                          <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">DAYS<br/>OPEN</th>
+                          <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">ATTEND</th>
+                          <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2">ABSENT</th>
+                          <th className="p-2 text-center font-semibold text-xs bg-[#1B5E20]" rowSpan="2" colSpan="2">ACTION</th>
+                        </tr>
+                        <tr className="bg-[#E8F5E9] text-gray-700 border-b border-gray-300">
+                          {pendingBroadsheet.subjects.map(s => (
+                            <React.Fragment key={s._id || s.id}>
+                              <th className="p-1 text-center font-semibold text-[11px] border-r border-gray-200 bg-[#E8F5E9]">CA1(20)</th>
+                              <th className="p-1 text-center font-semibold text-[11px] border-r border-gray-200 bg-[#E8F5E9]">CA2(20)</th>
+                              <th className="p-1 text-center font-semibold text-[11px] border-r border-gray-200 bg-[#E8F5E9]">EXAM(60)</th>
+                              <th className="p-1 text-center font-semibold text-[11px] border-r border-gray-200 bg-[#E8F5E9]">TOTAL(100)</th>
+                            </React.Fragment>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingBroadsheet.students.map((row, i) => (
+                          <tr key={row.student.id} className={`border-t ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-yellow-50`}>
+                            <td className="p-2 text-center font-bold sticky left-0 bg-inherit z-10">{i + 1}</td>
+                            <td className="p-2 font-medium whitespace-nowrap sticky left-[40px] bg-inherit z-10">{row.student.lastName} {row.student.firstName}</td>
+                            <td className="p-2 text-center font-mono text-xs">{row.student.regNo || '-'}</td>
+                            <td className="p-2 text-center font-bold">{row.student.gender || '-'}</td>
+                            {pendingBroadsheet.subjects.map(s => {
+                              const d = row.details[s._id || s.id]
+                              return d ? (
+                                <React.Fragment key={s._id || s.id}>
+                                  <td className="p-1 text-center">{d.ca1}</td>
+                                  <td className="p-1 text-center">{d.ca2}</td>
+                                  <td className="p-1 text-center">{d.exam}</td>
+                                  <td className={`p-1 text-center font-bold border-r border-gray-300 ${d.total >= 80 ? 'text-green-700' : d.total >= 60 ? 'text-blue-700' : 'text-red-700'}`}>{d.total}</td>
+                                </React.Fragment>
+                              ) : (
+                                <React.Fragment key={s._id || s.id}>
+                                  <td className="p-1 text-center text-gray-300">-</td>
+                                  <td className="p-1 text-center text-gray-300">-</td>
+                                  <td className="p-1 text-center text-gray-300">-</td>
+                                  <td className="p-1 text-center text-gray-300 border-r border-gray-300">-</td>
+                                </React.Fragment>
+                              )
+                            })}
+                            <td className="p-2 text-center font-bold">{row.totalScore}</td>
+                            <td className="p-2 text-center">{row.average}</td>
+                            <td className="p-2 text-center font-bold">{row.position ? row.position + (() => { const s = ['th','st','nd','rd']; const v = row.position % 100; return s[(v - 20) % 10] || s[v] || s[0] })() : '-'}</td>
+                            <td className="p-2 max-w-[120px] text-[11px] text-gray-600">{row.teacherComment || row.autoTeacherComment || '-'}</td>
+                            <td className="p-2 max-w-[140px] text-[11px]">{row.principalComment || row.autoPrincipalRemark || '-'}</td>
+                            <td className="p-2 text-center">{pendingBroadsheet.daysOpen ?? '-'}</td>
+                            <td className="p-2 text-center">{row.daysPresent ?? '-'}</td>
+                            <td className="p-2 text-center">{row.daysAbsent ?? '-'}</td>
+                            <td className="p-2 text-center">
+                              <button onClick={() => {
+                                if (!row.resultId) return setMessage({ type: 'error', text: 'No result ID for this student' });
+                                const scores = {}
+                                for (const sub of pendingBroadsheet.subjects) {
+                                  const d = row.details[sub._id || sub.id]
+                                  scores[sub._id || sub.id] = d ? { ca1: d.ca1, ca2: d.ca2, exam: d.exam } : { ca1: 0, ca2: 0, exam: 0 }
+                                }
+                                setEditScores(scores)
+                                setEditModalStudent(row)
+                              }}
+                                className="text-[10px] px-3 py-1.5 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition">
+                                Edit Result
+                              </button>
+                            </td>
+                            <td className="p-2 text-center">
+                              <button onClick={() => {
+                                if (row.withheld) return;
+                                if (!row.resultId) return setMessage({ type: 'error', text: 'No result ID for this student' });
+                                setWithholdModal(row);
+                                setWithholdChosenReason('');
+                                setWithholdCustomReason('');
+                              }}
+                                className={`text-[10px] px-3 py-1.5 rounded font-medium transition ${row.withheld ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`}>
+                                {row.withheld ? 'Withheld' : 'Withhold'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <p className="text-gray-400 text-center py-8">No data.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "withhold" && (
+        <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-base sm:text-lg text-[#1B5E20]">
+              Withheld Results
+            </h3>
+            <button onClick={loadWithheldResults}
+              className="text-xs text-[#1B5E20] hover:text-yellow-600 font-medium transition flex items-center gap-1"
+              disabled={withheldLoading}>
+              {withheldLoading && <Spinner small />}
+              Refresh
             </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs sm:text-sm">
               <thead>
                 <tr className="bg-gray-50">
-                  <th className="text-left p-2 sm:p-3 font-medium text-gray-600">
-                    Student
-                  </th>
-                  <th className="text-left p-2 sm:p-3 font-medium text-gray-600">
-                    Class
-                  </th>
-                  <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
-                    Total
-                  </th>
-                  <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
-                    Pos
-                  </th>
-                  <th className="text-left p-2 sm:p-3 font-medium text-gray-600">
-                    Principal's Remark
-                  </th>
-                  <th className="text-center p-2 sm:p-3 font-medium text-gray-600">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingResults.map((r) => (
-                  <tr key={r.id} className="border-t hover:bg-gray-50">
-                    <td className="p-2 sm:p-3 font-medium whitespace-nowrap">
-                      {r.student?.firstName} {r.student?.lastName}
-                    </td>
-                    <td className="p-2 sm:p-3">{r.class?.name}</td>
-                    <td className="p-2 sm:p-3 text-center font-bold">
-                      {r.totalScore}
-                    </td>
-                    <td className="p-2 sm:p-3 text-center">
-                      {r.position || "-"}
-                    </td>
-                    <td className="p-2 sm:p-3">
-                      <input
-                        type="text"
-                        value={
-                          principalCommentText[r.id] ?? r.principalComment ?? ""
-                        }
-                        onChange={(e) =>
-                          setPrincipalCommentText((prev) => ({
-                            ...prev,
-                            [r.id]: e.target.value,
-                          }))
-                        }
-                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
-                        placeholder="Add principal remark..."
-                      />
-                    </td>
-                    <td className="p-2 sm:p-3 text-center">
-                      <div className="flex gap-1 justify-center">
-                        <button
-                          onClick={() => handleSavePrincipalComment(r.id)}
-                          disabled={principalSaving === r.id}
-                          className="text-[10px] sm:text-xs px-2 sm:px-3 py-1 rounded bg-[#1B5E20] text-white font-medium hover:bg-[#2E7D32] transition disabled:opacity-50"
-                        >
-                          {principalSaving === r.id ? "..." : "Save"}
-                        </button>
-                        <button
-                          onClick={async () => {
-                            try {
-                              await resultAPI.updateStatus(r.id, {
-                                status: "APPROVED",
-                              });
-                              setMessage({
-                                type: "success",
-                                text: "Result approved",
-                              });
-                              loadPendingResults();
-                            } catch (err) {
-                              setMessage({
-                                type: "error",
-                                text: "Failed to approve",
-                              });
-                            }
-                          }}
-                          className="text-[10px] sm:text-xs px-2 sm:px-3 py-1 rounded bg-yellow-500 text-white font-medium hover:bg-yellow-600 transition"
-                        >
-                          Approve
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {pendingResults.length === 0 && (
-                  <tr>
-                    <td colSpan="6" className="text-center p-4 text-gray-400">
-                      No pending results found
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "withhold" && (
-        <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-          <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">
-            Withhold / Release Results
-          </h3>
-          <div className="flex flex-wrap gap-2 sm:gap-3 mb-4">
-            <select
-              value={withholdClass}
-              onChange={(e) => setWithholdClass(e.target.value)}
-              className="px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="">Select Class</option>
-              {classes.map((c) => (
-                <option key={c._id || c.id} value={c._id || c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={withholdSession}
-              onChange={(e) => setWithholdSession(e.target.value)}
-              className="px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="">Select Session</option>
-              {sessions.map((s) => (
-                <option key={s._id} value={s._id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={withholdTerm}
-              onChange={(e) => setWithholdTerm(e.target.value)}
-              className="px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="">Select Term</option>
-              {sessions
-                .filter((s) => s._id === withholdSession)
-                .flatMap((s) => s.terms)
-                .map((t) => (
-                  <option key={t._id} value={t._id}>
-                    {t.name}
-                  </option>
-                ))}
-            </select>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs sm:text-sm">
-              <thead>
-                <tr className="bg-gray-50">
                   <th className="text-left p-2 sm:p-3 font-medium">Student</th>
+                  <th className="text-left p-2 sm:p-3 font-medium">Class</th>
+                  <th className="text-left p-2 sm:p-3 font-medium">Session / Term</th>
                   <th className="text-left p-2 sm:p-3 font-medium">Total</th>
-                  <th className="text-left p-2 sm:p-3 font-medium">Status</th>
-                  <th className="text-left p-2 sm:p-3 font-medium">Action</th>
+                  <th className="text-left p-2 sm:p-3 font-medium">Reason</th>
+                  <th className="text-center p-2 sm:p-3 font-medium">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {withholdList.map((r) => (
-                  <tr key={r.id} className="border-t hover:bg-gray-50">
+                  <tr key={r._id || r.id} className="border-t hover:bg-gray-50">
                     <td className="p-2 sm:p-3 font-medium whitespace-nowrap">
-                      {r.student?.firstName} {r.student?.lastName}
+                      {r.student?.lastName} {r.student?.firstName}
+                      <span className="ml-1.5 text-[10px] text-gray-400 font-mono">{r.student?.regNo}</span>
                     </td>
+                    <td className="p-2 sm:p-3 whitespace-nowrap">{r.class?.name || '-'}</td>
                     <td className="p-2 sm:p-3 whitespace-nowrap">
-                      {r.totalScore}
+                      {r.session?.name || '-'} / {r.term?.name || '-'}
                     </td>
-                    <td className="p-2 sm:p-3 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] sm:text-xs font-bold ${r.withheld ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}
-                      >
-                        {r.withheld ? "Withheld" : "Released"}
-                      </span>
-                    </td>
-                    <td className="p-2 sm:p-3 whitespace-nowrap">
+                    <td className="p-2 sm:p-3 whitespace-nowrap">{r.totalScore}</td>
+                    <td className="p-2 sm:p-3 text-xs max-w-[200px]">{r.withholdReason || 'No reason provided'}</td>
+                    <td className="p-2 sm:p-3 text-center whitespace-nowrap">
                       <button
-                        onClick={() => handleWithhold(r.id, !r.withheld)}
-                        disabled={withholdLoading === r.id}
-                        className={`text-[10px] sm:text-xs px-2 sm:px-3 py-1 rounded text-white font-medium transition disabled:opacity-50 flex items-center gap-1 ${
-                          withholdLoading === r.id
-                            ? "bg-gray-400"
-                            : r.withheld
-                              ? "bg-green-600 hover:bg-green-700"
-                              : "bg-red-600 hover:bg-red-700"
-                        }`}
-                      >
-                        {withholdLoading === r.id && <Spinner small />}
-                        {withholdLoading === r.id
-                          ? "..."
-                          : r.withheld
-                            ? "Release"
-                            : "Withhold"}
+                        onClick={() => handleWithhold(r._id || r.id, false)}
+                        disabled={withholdLoading === (r._id || r.id)}
+                        className="text-[10px] sm:text-xs px-3 py-1 rounded bg-green-600 text-white font-medium hover:bg-green-700 transition disabled:opacity-50 flex items-center gap-1 mx-auto">
+                        {withholdLoading === (r._id || r.id) && <Spinner small />}
+                        {withholdLoading === (r._id || r.id) ? '...' : 'Release'}
                       </button>
                     </td>
                   </tr>
                 ))}
                 {withholdList.length === 0 && (
                   <tr>
-                    <td colSpan="4" className="text-center p-4 text-gray-400">
-                      Select class/session/term to view results
+                    <td colSpan="6" className="text-center p-4 text-gray-400">
+                      No withheld results
                     </td>
                   </tr>
                 )}
@@ -1979,6 +1956,69 @@ export default function ExamOfficerDashboard() {
         </div>
       )}
 
+      {withholdModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setWithholdModal(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-base text-gray-800">
+                Withhold Result - {withholdModal.student.lastName} {withholdModal.student.firstName}
+              </h3>
+              <button onClick={() => setWithholdModal(null)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">Select reason for withholding:</p>
+            <div className="space-y-2 mb-3">
+              {WITHHOLD_REASONS.map((r, idx) => (
+                <label key={idx} className={`flex items-start gap-2 p-3 border rounded-lg cursor-pointer transition ${withholdChosenReason === r ? 'border-red-500 bg-red-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <input type="radio" name="withholdReason" checked={withholdChosenReason === r}
+                    onChange={() => { setWithholdChosenReason(r); setWithholdCustomReason('') }}
+                    className="mt-0.5" />
+                  <span className="text-xs text-gray-700">{r}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Custom reason (optional):</label>
+              <textarea rows={2}
+                value={withholdCustomReason}
+                onChange={(e) => { setWithholdCustomReason(e.target.value); if (e.target.value) setWithholdChosenReason('') }}
+                placeholder="Or type a custom reason..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs" />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setWithholdModal(null)}
+                className="flex-1 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                Cancel
+              </button>
+              <button onClick={async () => {
+                const reason = withholdCustomReason || withholdChosenReason
+                if (!reason) return setMessage({ type: 'error', text: 'Please select or enter a reason' })
+                if (!withholdModal.resultId) return
+                setWithheldLoading(true)
+                try {
+                  await resultAPI.toggleWithhold(withholdModal.resultId, { withheld: true, reason })
+                  setMessage({ type: 'success', text: 'Result withheld' })
+                  const cid = pendingBroadsheet?.class?.id
+                  if (cid) loadPendingBroadsheet(pendingSid, pendingTid, cid)
+                  setWithholdModal(null)
+                } catch (err) {
+                  setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to withhold' })
+                } finally {
+                  setWithheldLoading(false)
+                }
+              }}
+                disabled={withheldLoading}
+                className="flex-1 py-2.5 rounded-lg bg-red-600 text-sm font-medium text-white hover:bg-red-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
+                {withheldLoading && <Spinner small />}
+                {withheldLoading ? 'Withholding...' : 'Confirm Withhold'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pinMessage && (
         <div className="fixed bottom-12 sm:bottom-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg shadow-lg text-xs sm:text-sm font-medium flex items-center gap-2 pointer-events-auto"
           style={{ animation: 'fadeInUp 0.3s ease-out' }}
@@ -1991,6 +2031,124 @@ export default function ExamOfficerDashboard() {
             }
           </svg>
           <span>{pinMessage.text}</span>
+        </div>
+      )}
+
+      {editModalStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setEditModalStudent(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-base text-gray-800">
+                Edit Result - {editModalStudent.student.lastName} {editModalStudent.student.firstName}
+              </h3>
+              <button onClick={() => setEditModalStudent(null)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs sm:text-sm border-collapse">
+                <thead>
+                  <tr className="bg-gray-100 border-b">
+                    <th className="p-2 text-left font-semibold">Subject</th>
+                    <th className="p-2 text-center font-semibold">CA1 (20)</th>
+                    <th className="p-2 text-center font-semibold">CA2 (20)</th>
+                    <th className="p-2 text-center font-semibold">Exam (60)</th>
+                    <th className="p-2 text-center font-semibold">Total</th>
+                    <th className="p-2 text-center font-semibold">Grade</th>
+                    <th className="p-2 text-center font-semibold">Remark</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(pendingBroadsheet?.subjects || archiveBroadsheet?.subjects || []).map(sub => {
+                    const scores = editScores[sub._id || sub.id] || { ca1: 0, ca2: 0, exam: 0 }
+                    const total = (scores.ca1 || 0) + (scores.ca2 || 0) + (scores.exam || 0)
+                    const grade = total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 60 ? 'C' : total >= 50 ? 'D' : total >= 40 ? 'E' : 'F'
+                    const remark = total >= 80 ? 'Excellent' : total >= 70 ? 'Very Good' : total >= 60 ? 'Good' : total >= 50 ? 'Fair' : total >= 40 ? 'Poor' : 'Fail'
+                    return (
+                      <tr key={sub._id || sub.id} className="border-t hover:bg-gray-50">
+                        <td className="p-2 font-medium">{sub.name}</td>
+                        <td className="p-2">
+                          <input type="number" min="0" max="20"
+                            value={scores.ca1 || 0}
+                            onChange={(e) => {
+                              const val = Math.min(20, Math.max(0, parseInt(e.target.value) || 0))
+                              setEditScores(prev => ({
+                                ...prev,
+                                [sub._id || sub.id]: { ...prev[sub._id || sub.id], ca1: val }
+                              }))
+                            }}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-xs" />
+                        </td>
+                        <td className="p-2">
+                          <input type="number" min="0" max="20"
+                            value={scores.ca2 || 0}
+                            onChange={(e) => {
+                              const val = Math.min(20, Math.max(0, parseInt(e.target.value) || 0))
+                              setEditScores(prev => ({
+                                ...prev,
+                                [sub._id || sub.id]: { ...prev[sub._id || sub.id], ca2: val }
+                              }))
+                            }}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-xs" />
+                        </td>
+                        <td className="p-2">
+                          <input type="number" min="0" max="60"
+                            value={scores.exam || 0}
+                            onChange={(e) => {
+                              const val = Math.min(60, Math.max(0, parseInt(e.target.value) || 0))
+                              setEditScores(prev => ({
+                                ...prev,
+                                [sub._id || sub.id]: { ...prev[sub._id || sub.id], exam: val }
+                              }))
+                            }}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-xs" />
+                        </td>
+                        <td className={`p-2 text-center font-bold ${total >= 80 ? 'text-green-700' : total >= 60 ? 'text-blue-700' : 'text-red-700'}`}>{total}</td>
+                        <td className="p-2 text-center font-bold">{grade}</td>
+                        <td className="p-2 text-center text-xs">{remark}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end gap-3 mt-4">
+              <button onClick={() => setEditModalStudent(null)}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
+                Cancel
+              </button>
+              <button onClick={async () => {
+                if (!editModalStudent.resultId) return
+                setEditSaving(true)
+                try {
+                  const scoresArr = Object.entries(editScores).map(([subjectId, s]) => ({
+                    subjectId,
+                    ca1: s.ca1 || 0,
+                    ca2: s.ca2 || 0,
+                    exam: s.exam || 0,
+                  }))
+                  await resultAPI.updateStudentScores(editModalStudent.resultId, { scores: scoresArr })
+                  setMessage({ type: 'success', text: 'Scores updated successfully' })
+                  const cid = pendingBroadsheet?.class?.id || archiveBroadsheet?.class?.id
+                  if (cid) {
+                    if (pendingBroadsheet) loadPendingBroadsheet(pendingSid, pendingTid, cid)
+                    if (archiveBroadsheet) loadArchiveBroadsheet(archiveSid, archiveTid, cid)
+                  }
+                  setEditModalStudent(null)
+                } catch (err) {
+                  setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to save scores' })
+                } finally {
+                  setEditSaving(false)
+                }
+              }}
+                disabled={editSaving}
+                className="bg-[#1B5E20] text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-[#2E7D32] transition disabled:opacity-50 flex items-center gap-2">
+                {editSaving && <Spinner small />}
+                {editSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

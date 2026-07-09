@@ -6,7 +6,11 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api': process.env.VITE_API_PROXY || 'http://localhost:5000'
+      '/api': process.env.VITE_API_PROXY || 'http://localhost:5000',
+      '/socket.io': {
+        target: process.env.VITE_API_PROXY || 'http://localhost:5000',
+        ws: true
+      }
     }
   }
 })

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -6,6 +6,16 @@ export default function Navbar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const navRef = useRef(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleClick = (e) => {
+      if (navRef.current && !navRef.current.contains(e.target)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [menuOpen])
 
   const handleLogout = () => {
     logout()
@@ -35,7 +45,7 @@ export default function Navbar() {
       ]
 
   return (
-    <nav className="bg-[#1B5E20] text-white shadow-lg sticky top-0 z-50">
+    <nav ref={navRef} className="bg-[#1B5E20] text-white shadow-lg sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
           <Link to="/" className="flex items-center space-x-3 shrink-0" onClick={() => setMenuOpen(false)}>

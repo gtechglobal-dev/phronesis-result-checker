@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
-const api = axios.create({ baseURL: `${API_URL}/api` });
+const api = axios.create({ baseURL: `${API_URL}/api`, timeout: 20000 });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
@@ -74,6 +74,9 @@ export const studentAPI = {
 
 export const resultAPI = {
   checkByRegNo: (data) => api.post("/results/check", data),
+  getPublishedSessions: () => api.get("/results/published-sessions"),
+  getPendingSummary: () => api.get("/results/pending/summary"),
+  getPendingBroadsheet: (sessionId, termId, classId) => api.get(`/results/pending/broadsheet/${sessionId}/${termId}/${classId}`),
   getPendingResults: (params) => api.get("/results/pending", { params }),
   getStudentResults: (studentId) => api.get(`/results/student/${studentId}`),
   getParentChildrenResults: () => api.get("/results/parent-children"),
@@ -84,9 +87,15 @@ export const resultAPI = {
     api.put(`/results/${id}/principal-comment`, data),
   toggleWithhold: (id, data) => api.put(`/results/${id}/withhold`, data),
   updateStatus: (id, data) => api.put(`/results/${id}/status`, data),
+  updateStudentScores: (id, data) => api.put(`/results/${id}/scores`, data),
+  publishClassResults: (sessionId, termId, classId) => api.post(`/results/publish/${sessionId}/${termId}/${classId}`),
+  getWithheldResults: () => api.get("/results/withheld"),
   getManageResults: (params) => api.get("/results/manage/all", { params }),
   updatePositions: (data) => api.post("/results/positions", data),
   getFormTeacherResults: (params) => api.get("/results/my-class", { params }),
+  getArchiveSessions: () => api.get("/results/archive/sessions"),
+  getArchiveClasses: (sessionId, termId) => api.get(`/results/archive/sessions/${sessionId}/terms/${termId}/classes`),
+  getArchiveBroadsheet: (sessionId, termId, classId) => api.get(`/results/archive/sessions/${sessionId}/terms/${termId}/classes/${classId}`),
 };
 
 export const pinAPI = {

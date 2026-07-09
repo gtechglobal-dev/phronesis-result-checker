@@ -180,25 +180,6 @@ exports.createTerm = async (req, res) => {
     const term = await Term.create({ name, session: sessionId, isCurrent: isCurrent || false })
     await AcademicSession.findByIdAndUpdate(sessionId, { $push: { terms: term._id } })
 
-    if (isCurrent) {
-      const classes = await Class.find()
-      for (const cls of classes) {
-        const students = await Student.find({ class: cls._id })
-        for (const student of students) {
-          const existingResult = await Result.findOne({ student: student._id, session: sessionId, term: term._id })
-          if (!existingResult) {
-            await Result.create({
-              student: student._id,
-              class: cls._id,
-              session: sessionId,
-              term: term._id,
-              examOfficer: req.user.id,
-            })
-          }
-        }
-      }
-    }
-
     res.status(201).json(term)
     try { emitBroadcast('entity:updated', { type: 'term' }) } catch (e) {}
   } catch (error) {
