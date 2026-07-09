@@ -456,7 +456,7 @@ exports.getPublishedSessions = async (req, res) => {
     const result = await Promise.all(sessions.map(async (s) => {
       const termIds = await Result.distinct('term', { session: s._id })
       const terms = s.terms.filter(t => termIds.some(id => id.toString() === t._id.toString()))
-      return { _id: s._id, name: s.name, terms: terms.map(t => ({ _id: t._id, name: t.name })) }
+      return { _id: s._id, name: s.name, isCurrent: s.isCurrent, terms: terms.map(t => ({ _id: t._id, name: t.name, isCurrent: t.isCurrent })) }
     }))
     res.json(result)
   } catch (error) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { resultAPI } from '../services/api'
 
@@ -41,12 +41,32 @@ export default function ResultChecker() {
   const [loading, setLoading] = useState(false)
   const [modal, setModal] = useState({ show: false, type: '', title: '', message: '' })
 
+  const initialLoad = useRef(true)
+
   useEffect(() => {
-    resultAPI.getPublishedSessions().then(res => { if (Array.isArray(res.data)) setSessions(res.data) }).catch(() => {})
+    resultAPI.getPublishedSessions().then(res => {
+      if (Array.isArray(res.data)) {
+        setSessions(res.data)
+        const current = res.data.find(s => s.isCurrent) || res.data[0]
+        if (current) {
+          setSessionId(current._id || current.id)
+          const ct = current.terms.find(t => t.isCurrent) || current.terms[0]
+          if (ct) setTermId(ct._id || ct.id)
+        }
+      }
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
-    setTermId('')
+    if (!sessionId && sessions.length) {
+      const current = sessions.find(s => s.isCurrent) || sessions[0]
+      if (current) setSessionId(current._id || current.id)
+    }
+  }, [sessions])
+
+  useEffect(() => {
+    if (!initialLoad.current) setTermId('')
+    initialLoad.current = false
     const s = sessions.find(s => (s._id || s.id) === sessionId)
     setTerms(s?.terms || [])
   }, [sessionId, sessions])
