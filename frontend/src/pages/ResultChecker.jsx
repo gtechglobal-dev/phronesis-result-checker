@@ -154,7 +154,7 @@ export default function ResultChecker() {
                     </svg>
                   </div>
                   <h3 className="text-lg font-bold text-gray-900 mb-2">{modal.title}</h3>
-                  <p className="text-sm text-gray-600 mb-6">{modal.message} This may be due to unpaid fees. Please contact the school office for more information.</p>
+                  <p className="text-sm text-gray-600 mb-6">{modal.message}</p>
                   <button onClick={() => setModal({ show: false, type: '', title: '', message: '' })}
                     className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 rounded-lg transition text-sm">
                     Close

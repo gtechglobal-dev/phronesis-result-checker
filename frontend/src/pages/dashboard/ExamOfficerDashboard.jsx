@@ -128,7 +128,7 @@ export default function ExamOfficerDashboard() {
   const [withheldLoading, setWithheldLoading] = useState(false);
 
   const WITHHOLD_REASONS = [
-    'Unpaid fees. Please call the school office for further negotiation.',
+    'Unpaid fees. Please call the school office for further assistance.',
     'Exam Malpractice. Please contact the school office.',
     'Behavioural misconduct towards school authorities. Please contact the school.'
   ]
