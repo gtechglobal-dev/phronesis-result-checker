@@ -294,7 +294,7 @@ export default function ResultChecker() {
               {/* SCHOOL NOTE */}
               <div className="bg-[#1B5E20]/5 border border-[#1B5E20]/20 rounded-lg p-3 sm:p-4 mb-4">
                 <p className="text-[11px] sm:text-xs text-gray-600 leading-relaxed text-center italic">
-                  At Phronesis Int'l School, we uphold the highest standards of academic excellence, integrity, and moral discipline. This result is a true reflection of our commitment to nurturing future leaders with strong character and a passion for learning.
+                  Thank you for trusting us with your ward's educational journey.
                 </p>
               </div>
 
