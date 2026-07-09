@@ -16,10 +16,11 @@ const PRINT_STYLES = `
       border: none;
     }
     .no-print { display: none !important; }
+    #result-sheet { padding: 8mm 10mm !important; }
   }
   @page {
     size: A4 portrait;
-    margin: 12mm;
+    margin: 8mm;
   }
 `
 
@@ -210,64 +211,74 @@ export default function ResultChecker() {
         </div>
       )}
 
-      {/* RESULT SHEET - A4 paper */}
+      {/* RESULT SHEET */}
       {result && student && (
-        <div className="min-h-screen bg-gray-100 py-4 px-2 sm:py-8 sm:px-4 no-print-wrapper">
+        <div className="min-h-screen bg-gray-100 py-3 px-3 sm:py-8 sm:px-4 no-print-wrapper">
           <div className="max-w-[210mm] mx-auto">
             <div id="result-sheet"
-              className="bg-white shadow-2xl mx-auto"
-              style={{ width: '100%', maxWidth: '210mm', minHeight: '297mm', padding: '12mm 14mm' }}>
+              className="bg-white shadow-xl mx-auto rounded-none sm:rounded-2xl p-4 sm:p-8 md:p-10 lg:p-12"
+              style={{ width: '100%', maxWidth: '210mm' }}>
 
               {/* HEADER */}
-              <div className="text-center border-b-2 border-[#1B5E20] pb-4 mb-5">
-                <img src="/school logo.png" alt="Phronesis Int'l School" className="h-16 w-16 sm:h-20 sm:w-20 mx-auto mb-2" />
-                <h1 className="text-xl sm:text-2xl font-bold text-[#1B5E20] tracking-tight">PHRONESIS INT'L SCHOOL</h1>
-                <p className="text-xs sm:text-sm text-gray-500 italic">...Building a legacy of excellence</p>
+              <div className="text-center border-b-2 border-[#1B5E20] pb-3 mb-4">
+                <img src="/school logo.png" alt="Phronesis Int'l School" className="h-14 w-14 sm:h-20 sm:w-20 mx-auto mb-2" />
+                <h1 className="text-lg sm:text-2xl font-bold text-[#1B5E20] tracking-tight">PHRONESIS INT'L SCHOOL</h1>
+                <p className="text-[11px] sm:text-sm text-gray-500 italic">...Building a legacy of excellence</p>
                 <h2 className="text-sm sm:text-base font-bold text-gray-800 mt-2 uppercase tracking-wide">Student's Academic Report</h2>
               </div>
 
-              {/* STUDENT INFO */}
-              <div className="mb-5">
-                <table className="w-full text-xs sm:text-sm">
-                  <tbody>
-                    <tr className="border-b border-gray-200">
-                      <td className="py-1.5 font-semibold text-gray-600 w-36">Name</td>
-                      <td className="py-1.5 font-bold text-gray-900">{student.lastName} {student.firstName}</td>
-                      <td className="py-1.5 font-semibold text-gray-600 w-36">Grand Total</td>
-                      <td className="py-1.5 font-bold text-gray-900">{result.totalScore}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200">
-                      <td className="py-1.5 font-semibold text-gray-600">Class</td>
-                      <td className="py-1.5 font-bold text-gray-900">{result.class?.name}</td>
-                      <td className="py-1.5 font-semibold text-gray-600">Average</td>
-                      <td className="py-1.5 font-bold text-gray-900">{result.average ?? (result.details?.length ? Math.round(result.totalScore / result.details.length) : '-')}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200">
-                      <td className="py-1.5 font-semibold text-gray-600">Session</td>
-                      <td className="py-1.5 font-bold text-gray-900">{result.session?.name}</td>
-                      <td className="py-1.5 font-semibold text-gray-600">Position</td>
-                      <td className="py-1.5 font-bold text-gray-900">{result.position ? `${result.position}${getOrdinalSuffix(result.position)}` : '-'}</td>
-                    </tr>
-                    <tr className="border-b border-gray-200">
-                      <td className="py-1.5 font-semibold text-gray-600">Term</td>
-                      <td className="py-1.5 font-bold text-gray-900">{result.term?.name}</td>
-                      <td className="py-1.5 font-semibold text-gray-600">Exam No</td>
-                      <td className="py-1.5 font-bold text-gray-900">{student.regNo}</td>
-                    </tr>
-                  </tbody>
-                </table>
+              {/* STUDENT INFO - letter style */}
+              <div className="bg-[#1B5E20]/5 rounded-xl p-4 mb-5">
+                <div className="flex items-center gap-3 mb-3 pb-3 border-b border-[#1B5E20]/10">
+                  <div className="w-10 h-10 rounded-full bg-[#1B5E20] flex items-center justify-center text-white font-bold text-sm shrink-0">
+                    {student.firstName?.[0]}{student.lastName?.[0]}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-base sm:text-lg font-bold text-gray-900 leading-tight truncate">{student.lastName} {student.firstName}</h3>
+                    <p className="text-xs text-gray-500">Exam No: {student.regNo}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:text-sm">
+                  <div>
+                    <span className="text-gray-500">Class:</span>
+                    <p className="font-semibold text-gray-900">{result.class?.name}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Term:</span>
+                    <p className="font-semibold text-gray-900">{result.term?.name}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Session:</span>
+                    <p className="font-semibold text-gray-900">{result.session?.name}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Grand Total:</span>
+                    <p className="font-semibold text-gray-900">{result.totalScore}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Average:</span>
+                    <p className="font-semibold text-gray-900">{result.average ?? (result.details?.length ? Math.round(result.totalScore / result.details.length) : '-')}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Position:</span>
+                    <p className="font-semibold text-gray-900">{result.position ? `${result.position}${getOrdinalSuffix(result.position)}` : '-'}</p>
+                  </div>
+                </div>
               </div>
 
               {/* SUBJECT RESULTS */}
-              <h3 className="font-bold text-sm text-[#1B5E20] mb-2 border-b border-gray-200 pb-1">Subject Results</h3>
-              <div className="overflow-x-auto mb-5">
+              <h3 className="font-bold text-sm text-[#1B5E20] mb-2 flex items-center gap-2">
+                <span className="w-1 h-4 bg-[#1B5E20] rounded-full inline-block"></span>
+                Subject Results
+              </h3>
+              <div className="overflow-x-auto mb-5 rounded-lg border border-gray-200">
                 <table className="w-full text-xs sm:text-sm border-collapse">
                   <thead>
                     <tr className="bg-[#1B5E20] text-white">
-                      <th className="p-2 text-center font-semibold w-8">#</th>
+                      <th className="p-2 text-center font-semibold w-7">#</th>
                       <th className="p-2 text-left font-semibold">SUBJECT</th>
-                      <th className="p-2 text-center font-semibold">CA1</th>
-                      <th className="p-2 text-center font-semibold">CA2</th>
+                      <th className="p-2 text-center font-semibold hidden sm:table-cell">CA1</th>
+                      <th className="p-2 text-center font-semibold hidden sm:table-cell">CA2</th>
                       <th className="p-2 text-center font-semibold">EXAM</th>
                       <th className="p-2 text-center font-semibold">TOTAL</th>
                     </tr>
@@ -275,10 +286,10 @@ export default function ResultChecker() {
                   <tbody>
                     {(result.details || []).map((d, i) => (
                       <tr key={d._id || d.id || i} className={`border-b ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                        <td className="p-2 text-center font-medium">{i + 1}</td>
+                        <td className="p-2 text-center font-medium text-gray-400">{i + 1}</td>
                         <td className="p-2 font-medium">{d.subject?.name}</td>
-                        <td className="p-2 text-center">{d.ca1}</td>
-                        <td className="p-2 text-center">{d.ca2}</td>
+                        <td className="p-2 text-center hidden sm:table-cell text-gray-600">{d.ca1}</td>
+                        <td className="p-2 text-center hidden sm:table-cell text-gray-600">{d.ca2}</td>
                         <td className="p-2 text-center font-semibold">{d.exam}</td>
                         <td className={`p-2 text-center font-bold ${d.total >= 80 ? 'text-green-700' : d.total >= 60 ? 'text-blue-700' : 'text-red-700'}`}>{d.total}</td>
                       </tr>
@@ -287,54 +298,62 @@ export default function ResultChecker() {
                 </table>
               </div>
 
-              {/* ATTENDANCE */}
-              <div className="mb-5">
-                <table className="w-full text-xs sm:text-sm">
-                  <tbody>
-                    <tr><td className="py-1 text-gray-600 w-48">No of times school opened:</td><td className="py-1 font-bold text-gray-900">{result.daysOpen ?? '-'}</td></tr>
-                    <tr><td className="py-1 text-gray-600">No of days present:</td><td className="py-1 font-bold text-green-700">{result.daysPresent ?? '-'}</td></tr>
-                    <tr><td className="py-1 text-gray-600">No of days absent:</td><td className="py-1 font-bold text-red-700">{result.daysAbsent ?? '-'}</td></tr>
-                    <tr><td className="py-1 text-gray-600">Next resumption date:</td><td className="py-1 font-bold text-gray-900">{result.nextResumptionDate ? new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</td></tr>
-                  </tbody>
-                </table>
+              {/* ATTENDANCE + SUMMARY ROW */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <p className="text-[18px] font-bold text-gray-900">{result.daysOpen ?? '-'}</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">Days Open</p>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <p className="text-[18px] font-bold text-green-700">{result.daysPresent ?? '-'}</p>
+                  <p className="text-[10px] text-green-600 uppercase tracking-wide">Present</p>
+                </div>
+                <div className="bg-red-50 rounded-lg p-3 text-center">
+                  <p className="text-[18px] font-bold text-red-700">{result.daysAbsent ?? '-'}</p>
+                  <p className="text-[10px] text-red-600 uppercase tracking-wide">Absent</p>
+                </div>
+                <div className="col-span-2 sm:col-span-1 bg-[#1B5E20]/5 rounded-lg p-3 text-center">
+                  <p className="text-[11px] font-semibold text-gray-700 leading-tight">Next Resumption</p>
+                  <p className="text-[11px] font-bold text-gray-900">{result.nextResumptionDate ? new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
+                </div>
               </div>
 
               {/* REMARKS */}
               <div className="mb-5 space-y-3">
-                <div className="border rounded-lg p-3">
-                  <h4 className="font-semibold text-xs text-gray-500 mb-1 uppercase">Form Teacher's Remark</h4>
-                  <p className="text-gray-900 text-xs sm:text-sm italic min-h-[1.5em]">{result.teacherComment || result.autoTeacherComment || '—'}</p>
+                <div className="border-l-4 border-[#1B5E20] bg-[#1B5E20]/5 rounded-r-lg p-3">
+                  <h4 className="font-semibold text-xs text-gray-500 mb-1 uppercase tracking-wide">Form Teacher's Remark</h4>
+                  <p className="text-gray-900 text-xs sm:text-sm italic">{result.teacherComment || result.autoTeacherComment || '—'}</p>
                 </div>
-                <div className="border rounded-lg p-3">
-                  <h4 className="font-semibold text-xs text-gray-500 mb-1 uppercase">Principal's Remark</h4>
-                  <p className="text-gray-900 text-xs sm:text-sm italic min-h-[1.5em]">{result.principalComment || result.autoPrincipalRemark || '—'}</p>
+                <div className="border-l-4 border-yellow-500 bg-yellow-50 rounded-r-lg p-3">
+                  <h4 className="font-semibold text-xs text-gray-500 mb-1 uppercase tracking-wide">Principal's Remark</h4>
+                  <p className="text-gray-900 text-xs sm:text-sm italic">{result.principalComment || result.autoPrincipalRemark || '—'}</p>
                 </div>
               </div>
 
               {/* SCHOOL NOTE */}
-              <div className="bg-[#1B5E20]/5 border border-[#1B5E20]/20 rounded-lg p-3 sm:p-4 mb-4">
-                <p className="text-[11px] sm:text-xs text-gray-600 leading-relaxed text-center italic">
+              <div className="text-center border-t border-gray-200 pt-4 mb-2">
+                <p className="text-[11px] sm:text-xs text-gray-500 italic leading-relaxed">
                   Thank you for trusting us with your ward's educational journey.
                 </p>
               </div>
 
               {/* FOOTER */}
-              <div className="text-center pt-3 border-t border-gray-200">
-                <p className="text-[10px] text-gray-400 italic">
-                  This result is computer-generated and does not require a signature. Phronesis Int'l School - Building a legacy of excellence.
+              <div className="text-center">
+                <p className="text-[9px] text-gray-400 italic">
+                  This result is computer-generated and does not require a signature. Phronesis Int'l School — Building a legacy of excellence.
                 </p>
               </div>
             </div>
 
             {/* ACTION BUTTONS */}
-            <div className="mt-5 text-center no-print">
+            <div className="mt-4 pb-6 text-center no-print flex flex-col sm:flex-row items-center justify-center gap-3">
               <button onClick={() => window.print()}
-                className="bg-[#1B5E20] text-white px-8 py-2.5 rounded-lg font-medium hover:bg-[#2E7D32] transition text-sm mr-3">
+                className="w-full sm:w-auto bg-[#1B5E20] text-white px-8 py-3 rounded-xl font-medium hover:bg-[#2E7D32] transition text-sm shadow-md shadow-[#1B5E20]/20">
                 Download PDF
               </button>
               <button onClick={() => { setResult(null); setStudent(null); setPin(''); }}
-                className="bg-white text-gray-600 border border-gray-300 px-8 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition text-sm">
-                Check Another
+                className="w-full sm:w-auto bg-white text-gray-600 border border-gray-300 px-8 py-3 rounded-xl font-medium hover:bg-gray-50 transition text-sm">
+                Check Another Result
               </button>
             </div>
           </div>

@@ -219,13 +219,17 @@ exports.checkByRegNo = async (req, res) => {
     })
     try { emitToRole('EXAM_OFFICER', 'pin:used', { pin: pinRecord.pin, regNo: trimmedRegNo }) } catch (e) {}
 
+    const details = result.details || []
+    const avg = result.average ?? (details.length ? Math.round(details.reduce((s, d) => s + (d.total ?? 0), 0) / details.length * 100) / 100 : 0)
     const termData = await Term.findById(termId)
     res.json({
       student,
       result: {
         ...result.toJSON(),
         daysOpen: termData?.daysOpen,
-        nextResumptionDate: termData?.nextResumptionDate
+        nextResumptionDate: termData?.nextResumptionDate,
+        autoTeacherComment: getTeacherComment(avg),
+        autoPrincipalRemark: getPrincipalRemark(avg)
       }
     })
   } catch (error) {
