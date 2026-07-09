@@ -1,4 +1,4 @@
-const { Student, Class, Result, AcademicSession, Term } = require('../models')
+const { Student, Class, Result, ResultDetail, Subject, AcademicSession, Term, SubjectAssignment } = require('../models')
 const { isString, escapeRegex, isValidObjectId, sanitizeString } = require('../utils/sanitize')
 const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 
@@ -189,6 +189,171 @@ exports.getStudentsByClass = async (req, res) => {
       .sort({ lastName: 1, firstName: 1 })
     res.json(students)
   } catch (error) {
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
+  }
+}
+
+exports.getClassStudentList = async (req, res) => {
+  try {
+    const { classId } = req.query
+    if (!classId || !isValidObjectId(classId)) {
+      return res.status(400).json({ message: 'classId required' })
+    }
+
+    const currentSession = await AcademicSession.findOne({ isCurrent: true })
+    if (!currentSession) return res.json({ students: [], subjects: [], currentSession: null })
+
+    const currentTerm = await Term.findOne({ session: currentSession._id, isCurrent: true })
+
+    const classRecord = await Class.findById(classId)
+    if (!classRecord) return res.status(404).json({ message: 'Class not found' })
+
+    const subjects = await Subject.find({ class: classId, session: currentSession._id }).sort({ name: 1 })
+
+    const allStudents = await Student.find({ class: classId })
+      .populate('class')
+      .populate('session')
+      .sort({ lastName: 1, firstName: 1 })
+
+    const studentRegNos = [...new Set(allStudents.map(s => s.regNo))]
+
+    const currentSessionStudents = await Student.find({
+      regNo: { $in: studentRegNos },
+      session: currentSession._id
+    }).select('regNo class')
+
+    const currentClassMap = {}
+    for (const s of currentSessionStudents) {
+      currentClassMap[s.regNo] = s.class.toString()
+    }
+
+    const previousSessionStudents = await Student.find({
+      regNo: { $in: studentRegNos },
+      session: { $ne: currentSession._id }
+    }).select('regNo class session createdAt')
+      .populate('session', 'name')
+      .populate('class', 'name')
+
+    const firstSeenMap = {}
+    for (const s of previousSessionStudents) {
+      const rn = s.regNo
+      if (!firstSeenMap[rn] || s.createdAt < firstSeenMap[rn].createdAt) {
+        firstSeenMap[rn] = s
+      }
+    }
+
+    const transferredClassIds = currentSessionStudents
+      .filter(s => currentClassMap[s.regNo] !== classId)
+      .map(s => s.class.toString())
+
+    const otherClassNames = {}
+    if (transferredClassIds.length > 0) {
+      const otherClasses = await Class.find({ _id: { $in: transferredClassIds } })
+      for (const c of otherClasses) otherClassNames[c._id.toString()] = c.name
+    }
+
+    const currentStudentRecords = await Student.find({
+      regNo: { $in: studentRegNos },
+      session: currentSession._id
+    }).select('regNo _id')
+
+    const currentStudentIds = currentStudentRecords.map(s => s._id)
+
+    let results = []
+    let resultDetails = []
+    if (currentTerm && currentStudentIds.length > 0) {
+      results = await Result.find({
+        student: { $in: currentStudentIds },
+        session: currentSession._id,
+        term: currentTerm._id
+      }).select('_id student status')
+
+      if (results.length > 0) {
+        resultDetails = await ResultDetail.find({
+          result: { $in: results.map(r => r._id) }
+        }).select('result subject submitted')
+      }
+    }
+
+    const resultByStudent = {}
+    for (const r of results) {
+      resultByStudent[r.student.toString()] = r
+    }
+
+    const detailsByResult = {}
+    for (const d of resultDetails) {
+      const rid = d.result.toString()
+      if (!detailsByResult[rid]) detailsByResult[rid] = []
+      detailsByResult[rid].push(d)
+    }
+
+    const studentList = allStudents.reduce((acc, s) => {
+      const rn = s.regNo
+      if (acc.find(x => x.regNo === rn)) return acc
+
+      const currentClassId = currentClassMap[rn]
+      const isActive = currentClassId === classId
+      const isTransferred = currentSessionStudents.some(x => x.regNo === rn) && currentClassId && currentClassId !== classId
+      const isGraduated = !currentSessionStudents.some(x => x.regNo === rn)
+
+      let status = 'ACTIVE'
+      let transferInfo = null
+      if (isTransferred) {
+        status = 'TRANSFERRED'
+        transferInfo = {
+          toClass: otherClassNames[currentClassId] || 'Unknown',
+          toClassId: currentClassId,
+        }
+      } else if (isGraduated) {
+        status = 'GRADUATED'
+      }
+
+      const currentRecord = currentSessionStudents.find(x => x.regNo === rn)
+      const result = currentRecord ? resultByStudent[currentRecord._id?.toString()] || resultByStudent[s._id?.toString()] : null
+
+      let submissionInfo = null
+      if (result) {
+        const details = detailsByResult[result._id.toString()] || []
+        const submittedCount = details.filter(d => d.submitted).length
+        submissionInfo = {
+          totalSubjects: subjects.length,
+          submittedSubjects: submittedCount,
+          resultStatus: result.status,
+        }
+      } else if (isActive && currentTerm) {
+        submissionInfo = {
+          totalSubjects: subjects.length,
+          submittedSubjects: 0,
+          resultStatus: 'NO_RESULT',
+        }
+      }
+
+      acc.push({
+        _id: s._id,
+        regNo: s.regNo,
+        firstName: s.firstName,
+        lastName: s.lastName,
+        gender: s.gender,
+        arm: s.arm,
+        parent: s.parent,
+        createdAt: s.createdAt,
+        status,
+        transferInfo,
+        enrollmentSession: s.session?.name || 'Unknown',
+        submissionInfo,
+      })
+      return acc
+    }, [])
+
+    res.json({
+      className: classRecord.name,
+      currentSession: { _id: currentSession._id, name: currentSession.name },
+      currentTerm: currentTerm ? { _id: currentTerm._id, name: currentTerm.name } : null,
+      subjects: subjects.map(s => ({ _id: s._id, name: s.name })),
+      students: studentList,
+    })
+  } catch (error) {
+    console.error('getClassStudentList error:', error.message)
     res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }

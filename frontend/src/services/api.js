@@ -68,6 +68,7 @@ export const studentAPI = {
   getById: (id) => api.get(`/students/${id}`),
   getMyChildren: () => api.get("/students/my-children"),
   getByClass: (classId) => api.get(`/students/by-class/${classId}`),
+  getClassList: (params) => api.get("/students/class-list", { params }),
   create: (data) => api.post("/students", data),
   bulkCreate: (data) => api.post("/students/bulk", data),
   update: (id, data) => api.put(`/students/${id}`, data),

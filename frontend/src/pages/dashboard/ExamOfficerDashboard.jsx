@@ -5,6 +5,7 @@ import {
   resultAPI,
   authAPI,
   pinAPI,
+  studentAPI,
 } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { useSocketListener } from '../../context/SocketContext'
@@ -167,6 +168,12 @@ export default function ExamOfficerDashboard() {
   const [copySubjectsLoading, setCopySubjectsLoading] = useState(false);
   const [copyMessage, setCopyMessage] = useState(null);
 
+  const [studentListClassId, setStudentListClassId] = useState('');
+  const [studentListData, setStudentListData] = useState(null);
+  const [studentListLoading, setStudentListLoading] = useState(false);
+  const [studentListFilter, setStudentListFilter] = useState('ALL');
+  const [studentListSearch, setStudentListSearch] = useState('');
+
   useEffect(() => {
     if (copyMessage) {
       const t = setTimeout(() => setCopyMessage(null), 4000);
@@ -195,6 +202,7 @@ export default function ExamOfficerDashboard() {
   const tabs = [
     { id: "sessions", label: "Sessions" },
     { id: "results", label: "Results" },
+    { id: "students", label: "Students" },
     { id: "classes-reg", label: "Register Classes" },
     { id: "subjects-reg", label: "Register Subjects" },
     { id: "teachers", label: "Form Teachers" },
@@ -261,6 +269,20 @@ export default function ExamOfficerDashboard() {
       console.error(err);
     } finally {
       setArchiveLoading(false);
+    }
+  };
+
+  const loadStudentList = async (classId) => {
+    if (!classId) { setStudentListData(null); return }
+    setStudentListLoading(true);
+    try {
+      const res = await studentAPI.getClassList({ classId });
+      setStudentListData(res.data);
+    } catch (err) {
+      console.error(err);
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to load students' });
+    } finally {
+      setStudentListLoading(false);
     }
   };
 
@@ -794,6 +816,181 @@ export default function ExamOfficerDashboard() {
                     </div>
                   ))}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "students" && (
+        <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
+          <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">
+            Students List
+          </h3>
+
+          <div className="flex flex-col sm:flex-row gap-3 mb-5">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Select Class</label>
+              <select
+                value={studentListClassId}
+                onChange={(e) => {
+                  const cid = e.target.value;
+                  setStudentListClassId(cid);
+                  setStudentListData(null);
+                  setStudentListFilter('ALL');
+                  setStudentListSearch('');
+                  if (cid) loadStudentList(cid);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">Choose a class...</option>
+                {classes.map((c) => (
+                  <option key={c._id} value={c._id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {studentListLoading && (
+            <div className="text-center py-8"><Spinner /></div>
+          )}
+
+          {studentListData && !studentListLoading && (
+            <>
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+                <span><strong>Class:</strong> {studentListData.className}</span>
+                {studentListData.currentSession && <span><strong>Session:</strong> {studentListData.currentSession.name}</span>}
+                {studentListData.currentTerm && <span><strong>Term:</strong> {studentListData.currentTerm.name}</span>}
+                <span><strong>Subjects:</strong> {studentListData.subjects?.length || 0}</span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                {[
+                  { label: 'Total', count: studentListData.students.length, color: 'bg-gray-100 text-gray-700' },
+                  { label: 'Active', count: studentListData.students.filter(s => s.status === 'ACTIVE').length, color: 'bg-green-100 text-green-700' },
+                  { label: 'Transferred', count: studentListData.students.filter(s => s.status === 'TRANSFERRED').length, color: 'bg-yellow-100 text-yellow-700' },
+                  { label: 'Graduated', count: studentListData.students.filter(s => s.status === 'GRADUATED').length, color: 'bg-blue-100 text-blue-700' },
+                ].map((c) => (
+                  <div key={c.label} className={`rounded-lg p-3 text-center ${c.color}`}>
+                    <p className="text-2xl font-bold">{c.count}</p>
+                    <p className="text-xs font-medium">{c.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                <div className="flex gap-1.5 flex-wrap">
+                  {['ALL', 'ACTIVE', 'TRANSFERRED', 'GRADUATED'].map((f) => (
+                    <button key={f} onClick={() => setStudentListFilter(f)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                        studentListFilter === f ? 'bg-[#1B5E20] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}>
+                      {f.charAt(0) + f.slice(1).toLowerCase()}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search name or reg no..."
+                  value={studentListSearch}
+                  onChange={(e) => setStudentListSearch(e.target.value)}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm sm:w-64"
+                />
+              </div>
+
+              {(() => {
+                let filtered = studentListData.students;
+                if (studentListFilter !== 'ALL') filtered = filtered.filter(s => s.status === studentListFilter);
+                if (studentListSearch.trim()) {
+                  const q = studentListSearch.toLowerCase();
+                  filtered = filtered.filter(s =>
+                    s.firstName.toLowerCase().includes(q) ||
+                    s.lastName.toLowerCase().includes(q) ||
+                    s.regNo.toLowerCase().includes(q)
+                  );
+                }
+
+                return (
+                  <div className="overflow-x-auto">
+                    {filtered.length === 0 ? (
+                      <p className="text-gray-400 text-sm text-center py-8">No students found.</p>
+                    ) : (
+                      <table className="w-full text-xs sm:text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 border-b">
+                            <th className="p-2 sm:p-3 text-left font-medium">#</th>
+                            <th className="p-2 sm:p-3 text-left font-medium">Name</th>
+                            <th className="p-2 sm:p-3 text-left font-medium">Reg No</th>
+                            <th className="p-2 sm:p-3 text-center font-medium">G</th>
+                            <th className="p-2 sm:p-3 text-center font-medium">Arm</th>
+                            <th className="p-2 sm:p-3 text-center font-medium">Status</th>
+                            <th className="p-2 sm:p-3 text-left font-medium">Transfer Info</th>
+                            <th className="p-2 sm:p-3 text-center font-medium">Result</th>
+                            <th className="p-2 sm:p-3 text-left font-medium">Parent</th>
+                            <th className="p-2 sm:p-3 text-left font-medium">Enrolled</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filtered.map((s, i) => (
+                            <tr key={s._id} className={`border-t hover:bg-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                              <td className="p-2 sm:p-3 font-medium text-gray-500">{i + 1}</td>
+                              <td className="p-2 sm:p-3 font-medium whitespace-nowrap">{s.lastName} {s.firstName}</td>
+                              <td className="p-2 sm:p-3 font-mono text-xs">{s.regNo}</td>
+                              <td className="p-2 sm:p-3 text-center font-bold">{s.gender || '-'}</td>
+                              <td className="p-2 sm:p-3 text-center">{s.arm || '-'}</td>
+                              <td className="p-2 sm:p-3 text-center">
+                                <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  s.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                                  s.status === 'TRANSFERRED' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {s.status}
+                                </span>
+                              </td>
+                              <td className="p-2 sm:p-3 text-xs text-gray-600">
+                                {s.transferInfo ? (
+                                  <span>To <strong>{s.transferInfo.toClass}</strong></span>
+                                ) : '-'}
+                              </td>
+                              <td className="p-2 sm:p-3 text-center">
+                                {s.submissionInfo ? (
+                                  <span className={`text-xs font-medium ${
+                                    s.submissionInfo.resultStatus === 'PUBLISHED' ? 'text-green-600' :
+                                    s.submissionInfo.resultStatus === 'SUBMITTED' ? 'text-yellow-600' :
+                                    s.submissionInfo.resultStatus === 'NO_RESULT' ? 'text-gray-400' :
+                                    'text-gray-500'
+                                  }`}>
+                                    {s.submissionInfo.submittedSubjects}/{s.submissionInfo.totalSubjects} submitted
+                                  </span>
+                                ) : <span className="text-gray-400 text-xs">-</span>}
+                              </td>
+                              <td className="p-2 sm:p-3 text-xs text-gray-500 max-w-[120px] truncate" title={s.parent ? `${s.parent.firstName} ${s.parent.lastName}` : 'No parent linked'}>
+                                {s.parent ? `${s.parent.firstName} ${s.parent.lastName}` : <span className="text-gray-300">-</span>}
+                              </td>
+                              <td className="p-2 sm:p-3 text-xs text-gray-500 whitespace-nowrap">
+                                {s.enrollmentSession || '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                );
+              })()}
+            </>
+          )}
+
+          {studentListData && !studentListLoading && studentListData.students.length === 0 && (
+            <p className="text-gray-400 text-sm text-center py-8">No students have been enrolled in this class.</p>
+          )}
+
+          {!studentListData && !studentListLoading && studentListClassId && (
+            <p className="text-gray-400 text-sm text-center py-8">Select a class to view its students.</p>
+          )}
+
+          {!studentListClassId && !studentListLoading && (
+            <div className="text-center py-8">
+              <p className="text-gray-400 text-sm">Select a class from the dropdown above to view its student list.</p>
             </div>
           )}
         </div>
