@@ -22,6 +22,7 @@ export default function SubjectTeacherDashboard() {
   const [selectedTermName, setSelectedTermName] = useState('')
   const [selectedSessionName, setSelectedSessionName] = useState('')
   const [saveStatus, setSaveStatus] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const timerRef = useRef(null)
   const pendingSaveRef = useRef(null)
   const dirtyRef = useRef(false)
@@ -246,6 +247,15 @@ export default function SubjectTeacherDashboard() {
 
   const getTotal = (form) => (form?.ca1 || 0) + (form?.ca2 || 0) + (form?.exam || 0)
 
+  const filteredStudents = searchQuery.trim()
+    ? students.filter(s => {
+        const q = searchQuery.toLowerCase()
+        const name = `${s.lastName} ${s.firstName}`.toLowerCase()
+        const regNo = (s.regNo || '').toLowerCase()
+        return name.includes(q) || regNo.includes(q)
+      })
+    : students
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
@@ -308,6 +318,40 @@ export default function SubjectTeacherDashboard() {
           </div>
         ) : students.length > 0 ? (
           <>
+            <div className="mb-4">
+              <div className="relative max-w-sm">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search by name or reg no..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B5E20] focus:border-transparent"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {searchQuery && (
+                <p className="text-xs text-gray-500 mt-1">{filteredStudents.length} of {students.length} students</p>
+              )}
+            </div>
+            {filteredStudents.length === 0 ? (
+              <div className="text-center py-8">
+                <svg className="mx-auto w-10 h-10 text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <p className="text-gray-500 text-sm">No students match "<span className="font-medium">{searchQuery}</span>"</p>
+                <button onClick={() => setSearchQuery('')} className="text-xs text-[#1B5E20] mt-1 hover:underline">Clear search</button>
+              </div>
+            ) : (
+            <>
             <div className="hidden sm:block relative overflow-x-auto max-h-[calc(100vh-320px)] border border-gray-200 rounded-lg">
               <table className="w-full text-sm whitespace-nowrap">
                 <thead className="sticky top-0 z-20 bg-gray-50">
@@ -322,7 +366,7 @@ export default function SubjectTeacherDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {students.map((student, idx) => {
+                  {filteredStudents.map((student, idx) => {
                     const sid = student._id || student.id
                     const form = scores[sid] || {}
                     const ca1Empty = form.ca1 == null || form.ca1 === ''
@@ -366,7 +410,7 @@ export default function SubjectTeacherDashboard() {
             </div>
 
             <div className="sm:hidden space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
-              {students.map((student, idx) => {
+              {filteredStudents.map((student, idx) => {
                 const sid = student._id || student.id
                 const form = scores[sid] || {}
                 const ca1Empty = form.ca1 == null || form.ca1 === ''
@@ -417,6 +461,8 @@ export default function SubjectTeacherDashboard() {
                 )
               })}
             </div>
+            </>
+            )}
             <div className="mt-6 flex flex-col items-center gap-3">
               <div className="flex items-center gap-3">
                 {saveStatus === 'saving' && (
