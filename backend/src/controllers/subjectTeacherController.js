@@ -60,44 +60,63 @@ exports.saveScores = async (req, res) => {
     const existingSubmitted = await ResultDetail.findOne({ result: { $in: resultIds }, subject: subjectId, submitted: true })
     if (existingSubmitted) return res.status(400).json({ message: 'Scores already submitted for this subject. Cannot modify.' })
 
-    const updatedResultIds = []
-    for (const item of scores) {
-      const result = await Result.findOneAndUpdate(
-        { student: item.studentId, session: sessionId, term: termId },
-        { $setOnInsert: { student: item.studentId, class: classId, session: sessionId, term: termId, examOfficer: req.user.id } },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      )
+    const resultBulkOps = scores.map(item => ({
+      updateOne: {
+        filter: { student: item.studentId, session: sessionId, term: termId },
+        update: { $setOnInsert: { student: item.studentId, class: classId, session: sessionId, term: termId, examOfficer: req.user.id } },
+        upsert: true
+      }
+    }))
+    const resultBulk = await Result.bulkWrite(resultBulkOps, { ordered: false })
 
-      const existingDetail = await ResultDetail.findOne({ result: result._id, subject: subjectId })
-      if (existingDetail?.submitted) continue
-      await ResultDetail.findOneAndUpdate(
-        { result: result._id, subject: subjectId },
-        {
-          $set: {
-            ca1: item.ca1 || 0,
-            ca2: item.ca2 || 0,
-            exam: item.exam || 0,
-            total: (item.ca1 || 0) + (item.ca2 || 0) + (item.exam || 0)
-          }
-        },
-        { upsert: true, new: true }
-      )
-      updatedResultIds.push(result._id)
+    const upsertedIds = Object.values(resultBulk.upsertedIds || {})
+    const allStudentIds = scores.map(s => s.studentId)
+    const existingResults = await Result.find({ student: { $in: allStudentIds }, session: sessionId, term: termId }).select('_id student')
+    const studentToResult = {}
+    for (const r of existingResults) studentToResult[r.student.toString()] = r._id
+
+    const studentScoreMap = {}
+    for (const item of scores) studentScoreMap[item.studentId] = item
+
+    const existingDetails = await ResultDetail.find({ result: { $in: existingResults.map(r => r._id) }, subject: subjectId }).select('_id result submitted')
+    const submittedDetailResults = new Set()
+    for (const d of existingDetails) {
+      if (d.submitted) submittedDetailResults.add(d.result.toString())
     }
 
-    if (updatedResultIds.length) {
-      const allDetails = await ResultDetail.find({ result: { $in: updatedResultIds } }).populate('subject')
-      const totals = {}
-      for (const d of allDetails) {
-        const rid = d.result._id.toString()
-        if (!totals[rid]) totals[rid] = { totalScore: 0, count: 0 }
-        totals[rid].totalScore += d.total
-        totals[rid].count++
-      }
-      await Promise.all(Object.entries(totals).map(([rid, t]) => {
+    const detailBulkOps = []
+    const updatedResultIds = []
+    for (const item of scores) {
+      const rid = studentToResult[item.studentId]
+      if (!rid) continue
+      if (submittedDetailResults.has(rid.toString())) continue
+      const ca1 = item.ca1 || 0, ca2 = item.ca2 || 0, exam = item.exam || 0
+      detailBulkOps.push({
+        updateOne: {
+          filter: { result: rid, subject: subjectId },
+          update: { $set: { ca1, ca2, exam, total: ca1 + ca2 + exam } },
+          upsert: true
+        }
+      })
+      updatedResultIds.push(rid)
+    }
+
+    if (detailBulkOps.length) {
+      await ResultDetail.bulkWrite(detailBulkOps, { ordered: false })
+
+      const agg = await ResultDetail.aggregate([
+        { $match: { result: { $in: updatedResultIds } } },
+        { $group: { _id: '$result', totalScore: { $sum: '$total' }, count: { $sum: 1 } } }
+      ])
+      const totalsMap = {}
+      for (const a of agg) totalsMap[a._id.toString()] = a
+
+      const resultUpdateOps = updatedResultIds.map(rid => {
+        const t = totalsMap[rid.toString()] || { totalScore: 0, count: 0 }
         const average = t.count ? Math.round((t.totalScore / t.count) * 100) / 100 : 0
-        return Result.findByIdAndUpdate(rid, { totalScore: t.totalScore, average, status: 'DRAFT' })
-      }))
+        return { updateOne: { filter: { _id: rid }, update: { $set: { totalScore: t.totalScore, average, status: 'DRAFT' } } } }
+      })
+      await Result.bulkWrite(resultUpdateOps)
     }
 
     res.json({ message: 'Scores saved' })

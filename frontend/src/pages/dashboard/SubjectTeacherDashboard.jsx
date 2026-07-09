@@ -26,6 +26,8 @@ export default function SubjectTeacherDashboard() {
   const timerRef = useRef(null)
   const pendingSaveRef = useRef(null)
   const dirtyRef = useRef(false)
+  const studentsRef = useRef([])
+  const isEditingRef = useRef(false)
 
   const showMessage = (type, text) => {
     setMessage({ type, text })
@@ -68,6 +70,10 @@ export default function SubjectTeacherDashboard() {
   }, [selectedClassId, selectedSession])
 
   useEffect(() => {
+    studentsRef.current = students
+  }, [students])
+
+  useEffect(() => {
     if (!selectedClassId || !selectedSubjectId || !selectedSession || !selectedTerm) {
       console.log('loadScores skip:', { selectedClassId, selectedSubjectId, selectedSession, selectedTerm })
       return
@@ -103,8 +109,8 @@ export default function SubjectTeacherDashboard() {
   }, [refreshClasses, refreshSubjects, refreshScores, selectedSubjectId, selectedClassId])
 
   useSocketListener('entity:updated', handleEntityUpdated)
-  useSocketListener('scores:saved', () => refreshScores())
-  useSocketListener('scores:submitted', () => refreshScores())
+  useSocketListener('scores:saved', () => { if (!isEditingRef.current) refreshScores() })
+  useSocketListener('scores:submitted', () => { if (!isEditingRef.current) refreshScores() })
 
   const loadScores = async (silent) => {
     try {
@@ -117,8 +123,18 @@ export default function SubjectTeacherDashboard() {
       })
       setStudents(res.data.students || [])
       const loaded = res.data.scores || {}
-      setScores(loaded)
-      pendingSaveRef.current = loaded
+      if (dirtyRef.current) {
+        setScores(prev => {
+          const merged = { ...loaded }
+          for (const key of Object.keys(prev)) {
+            if (prev[key]?._dirty) merged[key] = prev[key]
+          }
+          return merged
+        })
+      } else {
+        setScores(loaded)
+        pendingSaveRef.current = loaded
+      }
       dirtyRef.current = false
       setSubmitted(res.data.submitted || false)
     } catch (err) {
@@ -157,11 +173,13 @@ export default function SubjectTeacherDashboard() {
       [studentId]: {
         ...(scores[studentId] || {}),
         [field]: val === '' ? 0 : val,
-        [touchField]: true
+        [touchField]: true,
+        _dirty: true
       }
     }
     setScores(updated)
 
+    isEditingRef.current = true
     if (timerRef.current) clearTimeout(timerRef.current)
     pendingSaveRef.current = updated
     dirtyRef.current = true
@@ -170,7 +188,8 @@ export default function SubjectTeacherDashboard() {
       const pending = pendingSaveRef.current
       if (!pending) return
       setSaveStatus('saving')
-      const scoresArr = students
+      const currentStudents = studentsRef.current
+      const scoresArr = currentStudents
         .filter(s => pending[s._id || s.id] != null)
         .map(s => ({
           studentId: s._id || s.id,
@@ -186,11 +205,13 @@ export default function SubjectTeacherDashboard() {
         scores: scoresArr
       }).then(() => {
         dirtyRef.current = false
+        isEditingRef.current = false
         setSaveStatus('saved')
         setTimeout(() => setSaveStatus(''), 2000)
       }).catch((err) => {
         console.error('Auto-save failed:', err?.response?.data || err.message)
         setSaveStatus('error')
+        isEditingRef.current = false
       })
     }, 500)
   }, [scores, students, submitted, selectedSession, selectedTerm, selectedClassId, selectedSubjectId])
