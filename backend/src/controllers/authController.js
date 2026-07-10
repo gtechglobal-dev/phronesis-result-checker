@@ -108,13 +108,20 @@ exports.login = async (req, res) => {
     }
 
     if (ADMIN_USERNAMES.includes(email.trim())) {
+      const adminPassword = process.env.ADMIN_PASSWORD || "Schooladmin001";
       let admin = await User.findOne({ role: "EXAM_OFFICER" });
-      if (admin) {
-        const isMatch = await bcrypt.compare(password, admin.password);
-        if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
-      } else {
-        return res.status(400).json({ message: "Invalid credentials" });
+      if (!admin) {
+        const hashed = await bcrypt.hash(adminPassword, 12);
+        admin = await User.create({
+          email: "admin@phronesis.com",
+          password: hashed,
+          firstName: "Exam",
+          lastName: "Officer",
+          role: "EXAM_OFFICER",
+        });
       }
+      const isMatch = await bcrypt.compare(password, admin.password);
+      if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
       const token = generateToken(admin);
       return res.json({
         message: "Login successful",
