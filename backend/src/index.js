@@ -37,6 +37,10 @@ app.use(cors({
 app.use(express.json({ limit: '10kb' }))
 app.use(mongoSanitize())
 
+app.get('/wakeup', (req, res) => {
+  res.json({ status: 'ok' })
+})
+
 app.use('/api/', apiLimiter)
 app.use('/api/auth/login', loginLimiter)
 app.use('/api/auth/register', registerLimiter)

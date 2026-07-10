@@ -16,7 +16,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: ALLOWED_ORIGINS
-        value: https://phronesis-backend.onrender.com
+        value: https://phronesisresultportal.onrender.com
       - key: ADMIN_USERNAMES
         value: Admin1,Admin2,Admin3
       - key: ADMIN_PASSWORD
