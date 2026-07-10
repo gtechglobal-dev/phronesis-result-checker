@@ -389,25 +389,25 @@ export default function ResultChecker() {
 
               {/* ATTENDANCE + SUMMARY ROW */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-5 print-stats">
-                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="bg-gray-50 rounded-lg p-3 flex flex-col items-center justify-center">
                   <p className="text-[18px] font-bold text-gray-900">{result.daysOpen ?? '-'}</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">School Opened</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide text-center">No of times school Opened</p>
                 </div>
-                <div className="bg-green-50 rounded-lg p-3 text-center">
+                <div className="bg-green-50 rounded-lg p-3 flex flex-col items-center justify-center">
                   <p className="text-[18px] font-bold text-green-700">{result.daysPresent ?? '-'}</p>
-                  <p className="text-[10px] text-green-600 uppercase tracking-wide">Present</p>
+                  <p className="text-[10px] text-green-600 uppercase tracking-wide text-center">No of Times Present</p>
                 </div>
-                <div className="bg-red-50 rounded-lg p-3 text-center">
+                <div className="bg-red-50 rounded-lg p-3 flex flex-col items-center justify-center">
                   <p className="text-[18px] font-bold text-red-700">{result.daysAbsent ?? '-'}</p>
-                  <p className="text-[10px] text-red-600 uppercase tracking-wide">Absent</p>
+                  <p className="text-[10px] text-red-600 uppercase tracking-wide text-center">No of Times Absent</p>
                 </div>
-                <div className="bg-[#1B5E20]/5 rounded-lg p-3 text-center">
+                <div className="bg-[#1B5E20]/5 rounded-lg p-3 flex flex-col items-center justify-center">
                   <p className="text-[18px] font-bold text-[#1B5E20]">{result.classStudentCount ?? '—'}</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">Students</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide text-center">Students in Class</p>
                 </div>
-                <div className="bg-[#1B5E20]/5 rounded-lg p-3 text-center">
+                <div className="bg-[#1B5E20]/5 rounded-lg p-3 flex flex-col items-center justify-center">
                   <p className="text-[18px] font-bold text-gray-900">{result.nextResumptionDate ? new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">Resumption Date</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide text-center">Resumption Date</p>
                 </div>
               </div>
 
