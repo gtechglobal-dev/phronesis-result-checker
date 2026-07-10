@@ -203,7 +203,7 @@ export default function FormTeacherDashboard() {
 
   const handleDownloadPDF = () => {
     if (!studentList.length) return
-    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm' })
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
     const pageW = pdf.internal.pageSize.getWidth()
     const margin = 10
     const colW = [(pageW - margin * 2) * 0.08, (pageW - margin * 2) * 0.4, (pageW - margin * 2) * 0.17, (pageW - margin * 2) * 0.35]
