@@ -347,8 +347,8 @@ export default function ResultChecker() {
                   <p className="text-[18px] font-bold text-red-700">{result.daysAbsent ?? '-'}</p>
                   <p className="text-[10px] text-red-600 uppercase tracking-wide">No of Times Absent</p>
                 </div>
-                <div className="col-span-2 sm:col-span-1 bg-[#1B5E20]/5 rounded-lg p-3 text-center">
-                  <p className="text-[11px] font-semibold text-gray-700 leading-tight">Resumption Date</p>
+                <div className="col-span-2 sm:col-span-1 bg-[#1B5E20]/5 rounded-lg p-3 text-center flex flex-col items-center justify-center">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">Resumption Date</p>
                   <p className="text-[11px] font-bold text-gray-900">{result.nextResumptionDate ? new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
                 </div>
               </div>
@@ -372,12 +372,6 @@ export default function ResultChecker() {
                 </p>
               </div>
 
-              {/* FOOTER */}
-              <div className="text-center">
-                <p className="text-[9px] text-gray-400 italic">
-                  This result is computer-generated and does not require a signature. Phronesis Int'l School — Divine wisdom for excellence.
-                </p>
-              </div>
             </div>
 
             {/* ACTION BUTTONS */}
