@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { resultAPI } from '../services/api'
 
 const PRINT_STYLES = `
+  @page { size: A4 portrait; margin: 5mm; }
   @media print {
     body * { visibility: hidden; }
     #result-sheet, #result-sheet * { visibility: visible; }
@@ -14,6 +15,7 @@ const PRINT_STYLES = `
       margin: 0;
       box-shadow: none;
       border-radius: 0;
+      transform-origin: top left;
     }
     .no-print { display: none !important; }
     .no-print-wrapper { background: white !important; padding: 0 !important; }
@@ -29,6 +31,25 @@ const PRINT_STYLES = `
       z-index: 0;
     }
     #result-sheet > * { position: relative; z-index: 1; }
+    #result-sheet .print-header { margin-bottom: 2mm !important; }
+    #result-sheet .print-header h1 { font-size: 14pt !important; }
+    #result-sheet .print-header h2 { font-size: 9pt !important; margin-top: 1mm !important; }
+    #result-sheet .print-header img { height: 40px !important; width: 40px !important; margin-bottom: 1mm !important; }
+    #result-sheet .print-header p { font-size: 7pt !important; }
+    #result-sheet .print-info { padding: 2mm !important; margin-bottom: 2mm !important; }
+    #result-sheet .print-info td, #result-sheet .print-info th { font-size: 7pt !important; padding: 1mm 2mm !important; }
+    #result-sheet table { font-size: 7pt !important; }
+    #result-sheet table th, #result-sheet table td { padding: 1mm 1.5mm !important; }
+    #result-sheet .print-stats { margin-bottom: 2mm !important; gap: 1mm !important; }
+    #result-sheet .print-stats > div { padding: 1.5mm !important; }
+    #result-sheet .print-stats p:first-child { font-size: 10pt !important; }
+    #result-sheet .print-stats p:last-child { font-size: 5pt !important; }
+    #result-sheet .print-remarks { margin-bottom: 2mm !important; }
+    #result-sheet .print-remarks > div { padding: 1.5mm !important; }
+    #result-sheet .print-remarks p { font-size: 7pt !important; }
+    #result-sheet .print-remarks h4 { font-size: 6pt !important; }
+    #result-sheet .print-note { padding-top: 1mm !important; }
+    #result-sheet .print-note p { font-size: 7pt !important; }
   }
 `
 
@@ -71,6 +92,26 @@ export default function ResultChecker() {
   const [modal, setModal] = useState({ show: false, type: '', title: '', message: '' })
 
   const initialLoad = useRef(true)
+  const resultSheetRef = useRef(null)
+
+  const handlePrint = () => {
+    const el = resultSheetRef.current
+    if (!el) { window.print(); return }
+    const printableH = 287
+    const contentH = el.scrollHeight
+    if (contentH > printableH) {
+      const scale = printableH / contentH
+      el.style.transform = `scale(${scale})`
+      el.style.transformOrigin = 'top left'
+      el.style.width = `${100 / scale}%`
+    }
+    window.print()
+    setTimeout(() => {
+      el.style.transform = ''
+      el.style.transformOrigin = ''
+      el.style.width = ''
+    }, 500)
+  }
 
   useEffect(() => {
     resultAPI.getPublishedSessions().then(res => {
@@ -249,13 +290,13 @@ export default function ResultChecker() {
       {result && student && (
         <div className="min-h-screen bg-gray-100 py-3 px-3 sm:py-8 sm:px-4 no-print-wrapper">
           <div className="max-w-[210mm] mx-auto">
-            <div id="result-sheet"
+            <div id="result-sheet" ref={resultSheetRef}
               className="bg-white shadow-xl mx-auto rounded-none sm:rounded-2xl p-4 sm:p-8 md:p-10 lg:p-12"
               style={{ width: '100%', maxWidth: '210mm' }}>
               <style>{WATERMARK_STYLES}</style>
 
               {/* HEADER */}
-              <div className="text-center border-b-2 border-[#1B5E20] pb-3 mb-4">
+              <div className="text-center border-b-2 border-[#1B5E20] pb-3 mb-4 print-header">
                 <img src="/school logo.png" alt="Phronesis Int'l School" className="h-14 w-14 sm:h-20 sm:w-20 mx-auto mb-2" />
                 <h1 className="text-lg sm:text-2xl font-bold text-[#1B5E20] tracking-tight">PHRONESIS INT'L SCHOOL</h1>
                 <p className="text-[11px] sm:text-sm text-gray-500 italic">...Divine wisdom for excellence</p>
@@ -263,7 +304,7 @@ export default function ResultChecker() {
               </div>
 
               {/* STUDENT INFO - letter style */}
-              <div className="bg-[#1B5E20]/5 rounded-xl p-4 mb-5">
+              <div className="bg-[#1B5E20]/5 rounded-xl p-4 mb-5 print-info">
                 <div className="flex items-center gap-3 mb-3 pb-3 border-b border-[#1B5E20]/10">
                   <div className="w-10 h-10 rounded-full bg-[#1B5E20] flex items-center justify-center text-white font-bold text-sm shrink-0">
                     {student.firstName?.[0]}{student.lastName?.[0]}
@@ -334,7 +375,7 @@ export default function ResultChecker() {
               </div>
 
               {/* ATTENDANCE + SUMMARY ROW */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5 print-stats">
                 <div className="bg-gray-50 rounded-lg p-3 text-center">
                   <p className="text-[18px] font-bold text-gray-900">{result.daysOpen ?? '-'}</p>
                   <p className="text-[10px] text-gray-500 uppercase tracking-wide">No of times school Opened</p>
@@ -354,7 +395,7 @@ export default function ResultChecker() {
               </div>
 
               {/* REMARKS */}
-              <div className="mb-5 space-y-3">
+              <div className="mb-5 space-y-3 print-remarks">
                 <div className="border-l-4 border-[#1B5E20] bg-[#1B5E20]/5 rounded-r-lg p-3">
                   <h4 className="font-semibold text-xs text-gray-500 mb-1 uppercase tracking-wide">Form Teacher's Remark</h4>
                   <p className="text-gray-900 text-xs sm:text-sm italic">{result.teacherComment || result.autoTeacherComment || '—'}</p>
@@ -366,7 +407,7 @@ export default function ResultChecker() {
               </div>
 
               {/* SCHOOL NOTE */}
-              <div className="text-center border-t border-gray-200 pt-4 mb-2">
+              <div className="text-center border-t border-gray-200 pt-4 mb-2 print-note">
                 <p className="text-[11px] sm:text-xs text-gray-500 italic leading-relaxed">
                   Thank you for trusting us with your ward's educational journey.
                 </p>
@@ -376,7 +417,7 @@ export default function ResultChecker() {
 
             {/* ACTION BUTTONS */}
             <div className="mt-4 pb-6 text-center no-print flex flex-col sm:flex-row items-center justify-center gap-3">
-              <button onClick={() => window.print()}
+              <button onClick={handlePrint}
                 className="w-full sm:w-auto bg-[#1B5E20] text-white px-8 py-3 rounded-xl font-medium hover:bg-[#2E7D32] transition text-sm shadow-md shadow-[#1B5E20]/20">
                 Download PDF
               </button>
