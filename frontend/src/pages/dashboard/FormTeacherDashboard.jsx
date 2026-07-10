@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment, useCallback } from 'react'
+import { useState, useEffect, useRef, Fragment, useCallback, useMemo } from 'react'
 import { jsPDF } from 'jspdf'
 import * as XLSX from 'xlsx'
 import { classAPI, studentAPI, formTeacherAPI } from '../../services/api'
@@ -34,6 +34,14 @@ export default function FormTeacherDashboard() {
   const { user } = useAuth()
   const [myClass, setMyClass] = useState(null)
   const [broadsheet, setBroadsheet] = useState(null)
+  const [broadsheetSearch, setBroadsheetSearch] = useState('')
+  const filteredStudents = useMemo(() => {
+    if (!broadsheet || !broadsheetSearch) return broadsheet?.students || []
+    return broadsheet.students.filter(row =>
+      `${row.student.lastName} ${row.student.firstName} ${row.student.regNo || ''}`
+        .toLowerCase().includes(broadsheetSearch.toLowerCase())
+    )
+  }, [broadsheet, broadsheetSearch])
   const [sessions, setSessions] = useState([])
   const [selectedSession, setSelectedSession] = useState('')
   const [selectedTerm, setSelectedTerm] = useState('')
@@ -741,7 +749,17 @@ export default function FormTeacherDashboard() {
           </div>
 
           {broadsheet ? (
-            <div className="overflow-auto max-h-[calc(100vh-320px)]">
+            <>
+              <div className="mb-3">
+                <input
+                  type="text"
+                  placeholder="Search student by name..."
+                  value={broadsheetSearch}
+                  onChange={(e) => setBroadsheetSearch(e.target.value)}
+                  className="w-full sm:w-72 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1B5E20] focus:border-transparent"
+                />
+              </div>
+              <div className="overflow-auto max-h-[calc(100vh-320px)]">
               <table className="w-full text-xs sm:text-sm border-collapse">
                 <thead className="sticky top-0 z-20">
                     <tr className="bg-[#1B5E20] text-white">
@@ -768,13 +786,13 @@ export default function FormTeacherDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {broadsheet.students.length === 0 ? (
-                    <tr>
-                      <td colSpan={7 + broadsheet.subjects.length * 4} className="text-center py-12 text-gray-400">
-                        No students transferred yet. Use the <button onClick={() => setActiveTab('transfer')} className="text-[#1B5E20] underline font-medium">Transfer Students</button> tab to carry forward students.
-                      </td>
-                    </tr>
-                  ) : broadsheet.students.map((row, i) => (
+                  {filteredStudents.length === 0 ? (
+                      <tr>
+                        <td colSpan={7 + broadsheet.subjects.length * 4} className="text-center py-12 text-gray-400">
+                          {broadsheetSearch ? 'No students match your search.' : 'No students transferred yet. Use the Transfer Students tab to carry forward students.'}
+                        </td>
+                      </tr>
+                    ) : filteredStudents.map((row, i) => (
                     <tr key={row.student.id} className={`border-t ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-yellow-50`}>
                       <td className="p-2 text-center font-bold sticky left-0 bg-inherit z-10">{i + 1}</td>
                       <td className="p-2 font-medium whitespace-nowrap sticky left-[30px] bg-inherit z-10">{row.student.lastName} {row.student.firstName}</td>
@@ -843,6 +861,7 @@ export default function FormTeacherDashboard() {
                 </tfoot>
               </table>
             </div>
+            </>
           ) : (
             <div className="text-center py-8">
               <p className="text-gray-400 mb-2">No students in this class for the current session.</p>
