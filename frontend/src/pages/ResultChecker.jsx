@@ -15,7 +15,6 @@ const PRINT_STYLES = `
       margin: 0;
       box-shadow: none;
       border-radius: 0;
-      transform-origin: top left;
     }
     .no-print { display: none !important; }
     .no-print-wrapper { background: white !important; padding: 0 !important; }
@@ -31,15 +30,13 @@ const PRINT_STYLES = `
       z-index: 0;
     }
     #result-sheet > * { position: relative; z-index: 1; }
-    #result-sheet .print-header { margin-bottom: 2mm !important; }
-    #result-sheet .print-header h1 { font-size: 14pt !important; }
-    #result-sheet .print-header h2 { font-size: 9pt !important; margin-top: 1mm !important; }
-    #result-sheet .print-header img { height: 40px !important; width: 40px !important; margin-bottom: 1mm !important; }
+    #result-sheet .print-header { margin-bottom: 2mm; padding-bottom: 1mm; }
+    #result-sheet .print-header h1 { font-size: 13pt !important; }
+    #result-sheet .print-header h2 { font-size: 9pt !important; margin-top: 1mm; }
+    #result-sheet .print-header img { height: 35px !important; width: 35px !important; margin-bottom: 1mm; }
     #result-sheet .print-header p { font-size: 7pt !important; }
-    #result-sheet .print-info { padding: 2mm !important; margin-bottom: 2mm !important; }
-    #result-sheet .print-info td, #result-sheet .print-info th { font-size: 7pt !important; padding: 1mm 2mm !important; }
-    #result-sheet table { font-size: 7pt !important; }
-    #result-sheet table th, #result-sheet table td { padding: 1mm 1.5mm !important; }
+    #result-sheet .print-info { padding: 2mm !important; margin-bottom: 2mm !important; font-size: 7pt !important; }
+    #result-sheet .print-info h3 { font-size: 9pt !important; }
     #result-sheet .print-stats { margin-bottom: 2mm !important; gap: 1mm !important; }
     #result-sheet .print-stats > div { padding: 1.5mm !important; }
     #result-sheet .print-stats p:first-child { font-size: 10pt !important; }
@@ -48,7 +45,7 @@ const PRINT_STYLES = `
     #result-sheet .print-remarks > div { padding: 1.5mm !important; }
     #result-sheet .print-remarks p { font-size: 7pt !important; }
     #result-sheet .print-remarks h4 { font-size: 6pt !important; }
-    #result-sheet .print-note { padding-top: 1mm !important; }
+    #result-sheet .print-note { padding-top: 1mm; }
     #result-sheet .print-note p { font-size: 7pt !important; }
   }
 `
@@ -93,24 +90,10 @@ export default function ResultChecker() {
 
   const initialLoad = useRef(true)
   const resultSheetRef = useRef(null)
+  const subjectCount = result?.details?.length || 0
 
   const handlePrint = () => {
-    const el = resultSheetRef.current
-    if (!el) { window.print(); return }
-    const printableH = 287
-    const contentH = el.scrollHeight
-    if (contentH > printableH) {
-      const scale = printableH / contentH
-      el.style.transform = `scale(${scale})`
-      el.style.transformOrigin = 'top left'
-      el.style.width = `${100 / scale}%`
-    }
     window.print()
-    setTimeout(() => {
-      el.style.transform = ''
-      el.style.transformOrigin = ''
-      el.style.width = ''
-    }, 500)
   }
 
   useEffect(() => {
@@ -348,26 +331,27 @@ export default function ResultChecker() {
                 Subject Results
               </h3>
               <div className="overflow-x-auto mb-5 rounded-lg border border-gray-200">
-                <table className="w-full text-xs sm:text-sm border-collapse">
+                <table className="w-full border-collapse"
+                  style={{ fontSize: subjectCount > 14 ? '6.5px' : subjectCount > 10 ? '8px' : '' }}>
                   <thead>
                     <tr className="bg-[#1B5E20] text-white">
-                      <th className="p-2 text-center font-semibold w-7">#</th>
-                      <th className="p-2 text-left font-semibold">SUBJECT</th>
-                      <th className="p-2 text-center font-semibold hidden sm:table-cell">CA1</th>
-                      <th className="p-2 text-center font-semibold hidden sm:table-cell">CA2</th>
-                      <th className="p-2 text-center font-semibold">EXAM</th>
-                      <th className="p-2 text-center font-semibold">TOTAL</th>
+                      <th className="p-2 text-center font-semibold" style={{ padding: subjectCount > 14 ? '0.5mm' : subjectCount > 10 ? '1mm' : '' }}>#</th>
+                      <th className="p-2 text-left font-semibold" style={{ padding: subjectCount > 14 ? '0.5mm' : subjectCount > 10 ? '1mm' : '' }}>SUBJECT</th>
+                      <th className="p-2 text-center font-semibold hidden sm:table-cell" style={{ padding: subjectCount > 14 ? '0.5mm' : subjectCount > 10 ? '1mm' : '' }}>CA1</th>
+                      <th className="p-2 text-center font-semibold hidden sm:table-cell" style={{ padding: subjectCount > 14 ? '0.5mm' : subjectCount > 10 ? '1mm' : '' }}>CA2</th>
+                      <th className="p-2 text-center font-semibold" style={{ padding: subjectCount > 14 ? '0.5mm' : subjectCount > 10 ? '1mm' : '' }}>EXAM</th>
+                      <th className="p-2 text-center font-semibold" style={{ padding: subjectCount > 14 ? '0.5mm' : subjectCount > 10 ? '1mm' : '' }}>TOTAL</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(result.details || []).map((d, i) => (
                       <tr key={d._id || d.id || i} className={`border-b ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                        <td className="p-2 text-center font-medium text-gray-400">{i + 1}</td>
-                        <td className="p-2 font-medium">{d.subject?.name}</td>
-                        <td className="p-2 text-center hidden sm:table-cell text-gray-600">{d.ca1}</td>
-                        <td className="p-2 text-center hidden sm:table-cell text-gray-600">{d.ca2}</td>
-                        <td className="p-2 text-center font-semibold">{d.exam}</td>
-                        <td className={`p-2 text-center font-bold ${d.total >= 80 ? 'text-green-700' : d.total >= 60 ? 'text-blue-700' : 'text-red-700'}`}>{d.total}</td>
+                        <td className="p-2 text-center font-medium text-gray-400" style={{ padding: subjectCount > 14 ? '0.5mm' : subjectCount > 10 ? '1mm' : '' }}>{i + 1}</td>
+                        <td className="p-2 font-medium" style={{ padding: subjectCount > 14 ? '0.5mm' : subjectCount > 10 ? '1mm' : '' }}>{d.subject?.name}</td>
+                        <td className="p-2 text-center hidden sm:table-cell text-gray-600" style={{ padding: subjectCount > 14 ? '0.5mm' : subjectCount > 10 ? '1mm' : '' }}>{d.ca1}</td>
+                        <td className="p-2 text-center hidden sm:table-cell text-gray-600" style={{ padding: subjectCount > 14 ? '0.5mm' : subjectCount > 10 ? '1mm' : '' }}>{d.ca2}</td>
+                        <td className="p-2 text-center font-semibold" style={{ padding: subjectCount > 14 ? '0.5mm' : subjectCount > 10 ? '1mm' : '' }}>{d.exam}</td>
+                        <td className={`p-2 text-center font-bold ${d.total >= 80 ? 'text-green-700' : d.total >= 60 ? 'text-blue-700' : 'text-red-700'}`} style={{ padding: subjectCount > 14 ? '0.5mm' : subjectCount > 10 ? '1mm' : '' }}>{d.total}</td>
                       </tr>
                     ))}
                   </tbody>
