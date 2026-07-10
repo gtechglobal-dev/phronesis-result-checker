@@ -503,47 +503,83 @@ export default function FormTeacherDashboard() {
     const pageW = pdf.internal.pageSize.getWidth()
     const pageH = pdf.internal.pageSize.getHeight()
     const margin = 8
-    const colW = (pageW - margin * 2) / (3 + broadsheet.subjects.length * 4 + 3)
-    const rowH = 7
+
+    const colW = {
+      sn: 8,
+      name: 42,
+      gender: 8,
+      score: 14,
+      grandTotal: 16,
+      average: 13,
+      pos: 10,
+    }
+    const subColW = colW.score
+    const rowH = 6.5
+
+    const totalW = colW.sn + colW.name + colW.gender
+      + broadsheet.subjects.length * 4 * subColW
+      + colW.grandTotal + colW.average + colW.pos
+    const scale = (pageW - margin * 2) / totalW
+
+    const scaled = (key) => {
+      if (typeof key === 'number') return key * scale
+      return colW[key] * scale
+    }
+
+    const drawRect = (x, y, w, h) => pdf.rect(x, y, w, h)
+    const cellText = (text, x, y, w, align = 'center') => {
+      const tx = align === 'left' ? x + 1.5 : x + w / 2
+      const displayText = typeof text === 'string' && text.length > 22 ? text.slice(0, 20) + '..' : String(text)
+      pdf.text(displayText, tx, y + rowH - 1.5, { align, maxWidth: w - 2 })
+    }
+
     let y = margin + 12
 
     const drawHeader = () => {
       pdf.setFontSize(7)
       pdf.setFont('helvetica', 'bold')
       let x = margin
-      const cells = ['S/N', 'NAMES', 'G']
-      cells.forEach((h, i) => {
-        pdf.text(h, x + (i < 2 ? 2 : colW / 2), y + 3, { align: i < 2 ? 'left' : 'center' })
-        x += colW
-      })
+
+      drawRect(x, y - 5, scaled('sn'), rowH * 2)
+      cellText('S/N', x, y, scaled('sn')); x += scaled('sn')
+
+      drawRect(x, y - 5, scaled('name'), rowH * 2)
+      cellText('NAMES', x, y, scaled('name')); x += scaled('name')
+
+      drawRect(x, y - 5, scaled('gender'), rowH * 2)
+      cellText('G', x, y, scaled('gender')); x += scaled('gender')
+
       broadsheet.subjects.forEach(s => {
-        const sx = x
-        pdf.text(s.name, x + colW * 2, y + 3, { align: 'center' })
-        pdf.rect(x, y - 5, colW * 4, rowH * 2)
-        x += colW * 4
+        drawRect(x, y - 5, scaled(4 * subColW), rowH * 2)
+        cellText(s.name, x, y, scaled(4 * subColW))
+        x += scaled(4 * subColW)
       })
-      const lastCols = ['GRAND TOTAL', 'AVERAGE', 'POS']
-      lastCols.forEach(h => {
-        pdf.text(h, x + colW / 2, y + 3, { align: 'center' })
-        pdf.rect(x, y - 5, colW, rowH * 2)
-        x += colW
-      })
+
+      drawRect(x, y - 5, scaled('grandTotal'), rowH * 2)
+      cellText('GRAND\nTOTAL', x, y, scaled('grandTotal')); x += scaled('grandTotal')
+
+      drawRect(x, y - 5, scaled('average'), rowH * 2)
+      cellText('AVG', x, y, scaled('average')); x += scaled('average')
+
+      drawRect(x, y - 5, scaled('pos'), rowH * 2)
+      cellText('POS', x, y, scaled('pos'))
     }
 
     const drawSubHeader = () => {
-      let x = margin + colW * 3
-      pdf.setFontSize(6)
+      let x = margin + scaled('sn') + scaled('name') + scaled('gender')
+      pdf.setFontSize(5.5)
+      pdf.setFont('helvetica', 'bold')
       broadsheet.subjects.forEach(() => {
-        ;['CA1(20)', 'CA2(20)', 'EXAM(60)', 'Total(100)'].forEach((h, i) => {
-          pdf.text(h, x + colW / 2, y + 3, { align: 'center' })
-          pdf.rect(x, y - 5, colW, rowH)
-          x += colW
+        ;['CA1', 'CA2', 'EXAM', 'TOT'].forEach(h => {
+          drawRect(x, y - 5, scaled('score'), rowH)
+          cellText(h, x, y, scaled('score'))
+          x += scaled('score')
         })
       })
     }
 
     const drawRow = (row, i) => {
-      if (y + rowH > pageH - margin) {
+      if (y + rowH * 2 > pageH - margin) {
         pdf.addPage()
         y = margin + 12
         drawHeader()
@@ -552,31 +588,37 @@ export default function FormTeacherDashboard() {
       }
       y += rowH
       let x = margin
-      pdf.setFontSize(6)
+      pdf.setFontSize(5.5)
       pdf.setFont('helvetica', 'normal')
-      pdf.text(String(i + 1), x + colW / 2, y, { align: 'center' })
-      pdf.rect(x, y - 5, colW, rowH)
-      x += colW
-      pdf.text(`${row.student.lastName} ${row.student.firstName}`, x + 2, y, { align: 'left' })
-      pdf.rect(x, y - 5, colW, rowH)
-      x += colW
-      pdf.text(row.student.gender || '-', x + colW / 2, y, { align: 'center' })
-      pdf.rect(x, y - 5, colW, rowH)
-      x += colW
+
+      drawRect(x, y - 5, scaled('sn'), rowH)
+      cellText(String(i + 1), x, y, scaled('sn')); x += scaled('sn')
+
+      drawRect(x, y - 5, scaled('name'), rowH)
+      cellText(`${row.student.lastName} ${row.student.firstName}`, x, y, scaled('name'), 'left'); x += scaled('name')
+
+      drawRect(x, y - 5, scaled('gender'), rowH)
+      cellText(row.student.gender || '-', x, y, scaled('gender')); x += scaled('gender')
+
       broadsheet.subjects.forEach(s => {
         const d = row.details[s._id || s.id]
         const sv = (v) => d && d.submitted ? v : (v || '-')
         const vals = d ? [sv(d.ca1), sv(d.ca2), sv(d.exam), sv(d.total)] : ['-', '-', '-', '-']
         vals.forEach(v => {
-          pdf.text(String(v), x + colW / 2, y, { align: 'center' })
-          pdf.rect(x, y - 5, colW, rowH)
-          x += colW
+          drawRect(x, y - 5, scaled('score'), rowH)
+          cellText(String(v), x, y, scaled('score'))
+          x += scaled('score')
         })
       })
-      ;[row.totalScore, row.average, formatPosition(row.position)].forEach(v => {
-        pdf.text(String(v), x + colW / 2, y, { align: 'center' })
-        pdf.rect(x, y - 5, colW, rowH)
-        x += colW
+
+      ;[
+        { label: row.totalScore, key: 'grandTotal' },
+        { label: row.average, key: 'average' },
+        { label: formatPosition(row.position), key: 'pos' },
+      ].forEach(({ label, key }) => {
+        drawRect(x, y - 5, scaled(key), rowH)
+        cellText(String(label), x, y, scaled(key))
+        x += scaled(key)
       })
     }
 

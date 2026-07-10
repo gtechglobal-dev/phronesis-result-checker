@@ -31,6 +31,7 @@ export default function ResultChecker() {
   }
 
   const [regNo, setRegNo] = useState('')
+  const [examDigits, setExamDigits] = useState('')
   const [sessionId, setSessionId] = useState('')
   const [termId, setTermId] = useState('')
   const [terms, setTerms] = useState([])
@@ -74,7 +75,8 @@ export default function ResultChecker() {
 
   const handleSearch = async (e) => {
     e.preventDefault()
-    if (!regNo || !sessionId || !termId || !pin) {
+    const fullRegNo = examDigits ? `PHS/${examDigits}` : ''
+    if (!fullRegNo || !sessionId || !termId || !pin) {
       setModal({ show: true, type: 'error', title: 'Incomplete Fields', message: 'Please fill in all fields before checking your result.' })
       return
     }
@@ -82,7 +84,7 @@ export default function ResultChecker() {
     setResult(null)
     setStudent(null)
     try {
-      const res = await resultAPI.checkByRegNo({ regNo, sessionId, termId, pin })
+      const res = await resultAPI.checkByRegNo({ regNo: fullRegNo, sessionId, termId, pin })
       if (res.data.withheld) {
         setStudent(res.data.student)
         setModal({ show: true, type: 'withheld', title: 'Result Withheld', message: res.data.message })
@@ -156,10 +158,15 @@ export default function ResultChecker() {
             <form onSubmit={handleSearch} className="space-y-4">
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Examination Number</label>
-                <input type="text" required maxLength={20} value={regNo}
-                  onChange={(e) => setRegNo(e.target.value.toUpperCase())}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1B5E20] focus:border-transparent outline-none text-sm"
-                  placeholder="e.g., PHS/00001" />
+                <div className="flex">
+                  <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm font-mono select-none">
+                    PHS/
+                  </span>
+                  <input type="text" required maxLength={10} value={examDigits}
+                    onChange={(e) => setExamDigits(e.target.value.replace(/[^0-9]/g, ''))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-[#1B5E20] focus:border-transparent outline-none text-sm"
+                    placeholder="e.g., 00001" />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

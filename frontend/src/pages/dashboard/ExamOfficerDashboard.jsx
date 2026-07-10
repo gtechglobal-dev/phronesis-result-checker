@@ -52,6 +52,13 @@ const SUBJECTS_LIST = [
   "SPEECH AND DRAMA", "SWIMMING", "CHESS", "STEM"
 ]
 
+const formatDate = (d) => {
+  if (!d) return '-'
+  try {
+    return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  } catch { return '-' }
+}
+
 export default function ExamOfficerDashboard() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -173,6 +180,9 @@ export default function ExamOfficerDashboard() {
   const [studentListLoading, setStudentListLoading] = useState(false);
   const [studentListFilter, setStudentListFilter] = useState('ALL');
   const [studentListSearch, setStudentListSearch] = useState('');
+  const [showGraduated, setShowGraduated] = useState(false);
+  const [graduatedData, setGraduatedData] = useState(null);
+  const [graduatedLoading, setGraduatedLoading] = useState(false);
 
   useEffect(() => {
     if (copyMessage) {
@@ -301,6 +311,19 @@ export default function ExamOfficerDashboard() {
   useEffect(() => {
     if (activeTab === 'withhold') loadWithheldResults();
   }, [activeTab]);
+
+  const loadGraduated = async () => {
+    setGraduatedLoading(true);
+    try {
+      const res = await studentAPI.getGraduated();
+      setGraduatedData(res.data);
+    } catch (err) {
+      console.error(err);
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to load graduated students' });
+    } finally {
+      setGraduatedLoading(false);
+    }
+  };
 
   const loadPendingSummary = async () => {
     setPendingLoading(true);
@@ -488,7 +511,11 @@ export default function ExamOfficerDashboard() {
   const loadPins = async () => {
     try {
       const res = await pinAPI.list();
-      setPinList(res.data);
+      const usedUp = res.data.filter(p => p.usedCount >= p.maxUses);
+      if (usedUp.length > 0) {
+        await Promise.allSettled(usedUp.map(p => pinAPI.deletePin(p._id || p.id)));
+      }
+      setPinList(res.data.filter(p => p.usedCount < p.maxUses));
     } catch (err) {
       console.error(err);
     }
@@ -824,7 +851,7 @@ export default function ExamOfficerDashboard() {
       {activeTab === "students" && (
         <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
           <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">
-            Students List
+            Class Management
           </h3>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-5">
@@ -850,6 +877,91 @@ export default function ExamOfficerDashboard() {
             </div>
           </div>
 
+          {!showGraduated && (
+            <button
+              onClick={() => { setShowGraduated(true); if (!graduatedData) loadGraduated(); }}
+              className="mb-4 text-xs font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
+            >
+              View Graduated Students &rarr;
+            </button>
+          )}
+
+          {showGraduated ? (
+            <div className="border border-blue-200 rounded-lg p-4 bg-blue-50/50">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-sm text-blue-800">Graduated Students</h4>
+                <button
+                  onClick={() => setShowGraduated(false)}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline"
+                >
+                  &larr; Back to class list
+                </button>
+              </div>
+
+              {graduatedLoading && <div className="text-center py-6"><Spinner /></div>}
+
+              {graduatedData && !graduatedLoading && (
+                <>
+                  <p className="text-xs text-gray-500 mb-3">{graduatedData.total} student{graduatedData.total !== 1 ? 's' : ''} graduated</p>
+
+                  {graduatedData.students.length === 0 ? (
+                    <p className="text-gray-400 text-sm text-center py-6">No graduated students found.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-blue-100 border-b border-blue-200">
+                            <th className="p-2 text-left font-medium">#</th>
+                            <th className="p-2 text-left font-medium">Name</th>
+                            <th className="p-2 text-left font-medium">Exam No</th>
+                            <th className="p-2 text-left font-medium">Last Class</th>
+                            <th className="p-2 text-left font-medium">Last Session</th>
+                            <th className="p-2 text-left font-medium">Graduated</th>
+                            <th className="p-2 text-left font-medium">Last Term</th>
+                            <th className="p-2 text-left font-medium">Grades Summary</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {graduatedData.students.map((s, i) => (
+                            <tr key={s._id} className={`border-t border-blue-100 ${i % 2 === 0 ? 'bg-white' : 'bg-blue-50/30'}`}>
+                              <td className="p-2 font-medium text-gray-500">{i + 1}</td>
+                              <td className="p-2 font-medium whitespace-nowrap">{s.lastName} {s.firstName}</td>
+                              <td className="p-2 font-mono">{s.regNo}</td>
+                              <td className="p-2">{s.lastClass}</td>
+                              <td className="p-2">{s.lastSession}</td>
+                              <td className="p-2 whitespace-nowrap">{formatDate(s.graduatedAt)}</td>
+                              <td className="p-2">{s.lastResult?.term || '-'}</td>
+                              <td className="p-2">
+                                {s.lastGrades?.length > 0 ? (
+                                  <div className="space-y-0.5">
+                                    {s.lastGrades.slice(0, 5).map((g, gi) => (
+                                      <div key={gi} className="text-[10px] text-gray-600">
+                                        {g.subject}: <span className="font-medium">{g.grade || g.total || '-'}</span>
+                                      </div>
+                                    ))}
+                                    {s.lastGrades.length > 5 && (
+                                      <div className="text-[10px] text-gray-400 italic">
+                                        +{s.lastGrades.length - 5} more
+                                      </div>
+                                    )}
+                                    <div className="text-[10px] font-medium text-gray-700 mt-1">
+                                      Total: {s.lastResult?.totalObtained || 0}/{s.lastGrades.length * 100 || '-'} | {s.lastResult?.status || '-'}
+                                    </div>
+                                  </div>
+                                ) : <span className="text-gray-400">-</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <>
+
           {studentListLoading && (
             <div className="text-center py-8"><Spinner /></div>
           )}
@@ -860,15 +972,14 @@ export default function ExamOfficerDashboard() {
                 <span><strong>Class:</strong> {studentListData.className}</span>
                 {studentListData.currentSession && <span><strong>Session:</strong> {studentListData.currentSession.name}</span>}
                 {studentListData.currentTerm && <span><strong>Term:</strong> {studentListData.currentTerm.name}</span>}
-                <span><strong>Subjects:</strong> {studentListData.subjects?.length || 0}</span>
+                <span><strong>Subjects:</strong> {studentListData.stats?.totalSubjects || 0}</span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+              <div className="grid grid-cols-3 gap-3 mb-5">
                 {[
-                  { label: 'Total', count: studentListData.students.length, color: 'bg-gray-100 text-gray-700' },
-                  { label: 'Active', count: studentListData.students.filter(s => s.status === 'ACTIVE').length, color: 'bg-green-100 text-green-700' },
-                  { label: 'Transferred', count: studentListData.students.filter(s => s.status === 'TRANSFERRED').length, color: 'bg-yellow-100 text-yellow-700' },
-                  { label: 'Graduated', count: studentListData.students.filter(s => s.status === 'GRADUATED').length, color: 'bg-blue-100 text-blue-700' },
+                  { label: 'Total', count: studentListData.stats?.totalStudents || 0, color: 'bg-gray-100 text-gray-700' },
+                  { label: 'Active', count: studentListData.stats?.activeCount || 0, color: 'bg-green-100 text-green-700' },
+                  { label: 'Transferred', count: studentListData.stats?.transferredCount || 0, color: 'bg-yellow-100 text-yellow-700' },
                 ].map((c) => (
                   <div key={c.label} className={`rounded-lg p-3 text-center ${c.color}`}>
                     <p className="text-2xl font-bold">{c.count}</p>
@@ -877,9 +988,33 @@ export default function ExamOfficerDashboard() {
                 ))}
               </div>
 
+              {studentListData.formTeacher && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs">
+                  <span className="font-medium text-blue-700">Form Teacher:</span>{' '}
+                  <span className="text-blue-600">{studentListData.formTeacher.name}</span>
+                  <span className="text-blue-400 mx-1">|</span>
+                  <span className="text-blue-500">{studentListData.formTeacher.email}</span>
+                </div>
+              )}
+
+              {studentListData.classHistory?.length > 0 && (
+                <details className="mb-4 group">
+                  <summary className="text-xs font-medium text-gray-500 cursor-pointer hover:text-gray-700 select-none">
+                    Class History ({studentListData.classHistory.length} session{studentListData.classHistory.length > 1 ? 's' : ''})
+                  </summary>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {studentListData.classHistory.map((h, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-gray-100 text-gray-600">
+                        {h.sessionName}: <strong>{h.count}</strong> student{h.count > 1 ? 's' : ''}
+                      </span>
+                    ))}
+                  </div>
+                </details>
+              )}
+
               <div className="flex flex-col sm:flex-row gap-3 mb-4">
                 <div className="flex gap-1.5 flex-wrap">
-                  {['ALL', 'ACTIVE', 'TRANSFERRED', 'GRADUATED'].map((f) => (
+                  {['ALL', 'ACTIVE', 'TRANSFERRED'].map((f) => (
                     <button key={f} onClick={() => setStudentListFilter(f)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
                         studentListFilter === f ? 'bg-[#1B5E20] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -924,7 +1059,8 @@ export default function ExamOfficerDashboard() {
                             <th className="p-2 sm:p-3 text-center font-medium">Arm</th>
                             <th className="p-2 sm:p-3 text-center font-medium">Status</th>
                             <th className="p-2 sm:p-3 text-left font-medium">Transfer Info</th>
-                            <th className="p-2 sm:p-3 text-center font-medium">Result</th>
+                            <th className="p-2 sm:p-3 text-left font-medium">Result</th>
+                            <th className="p-2 sm:p-3 text-left font-medium">Submitted At</th>
                             <th className="p-2 sm:p-3 text-left font-medium">Parent</th>
                             <th className="p-2 sm:p-3 text-left font-medium">Enrolled</th>
                           </tr>
@@ -940,8 +1076,7 @@ export default function ExamOfficerDashboard() {
                               <td className="p-2 sm:p-3 text-center">
                                 <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
                                   s.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
-                                  s.status === 'TRANSFERRED' ? 'bg-yellow-100 text-yellow-700' :
-                                  'bg-blue-100 text-blue-700'
+                                  'bg-yellow-100 text-yellow-700'
                                 }`}>
                                   {s.status}
                                 </span>
@@ -951,7 +1086,7 @@ export default function ExamOfficerDashboard() {
                                   <span>To <strong>{s.transferInfo.toClass}</strong></span>
                                 ) : '-'}
                               </td>
-                              <td className="p-2 sm:p-3 text-center">
+                              <td className="p-2 sm:p-3 text-left">
                                 {s.submissionInfo ? (
                                   <span className={`text-xs font-medium ${
                                     s.submissionInfo.resultStatus === 'PUBLISHED' ? 'text-green-600' :
@@ -960,8 +1095,12 @@ export default function ExamOfficerDashboard() {
                                     'text-gray-500'
                                   }`}>
                                     {s.submissionInfo.submittedSubjects}/{s.submissionInfo.totalSubjects} submitted
+                                    <span className="block text-[10px] opacity-70">{s.submissionInfo.resultStatus}</span>
                                   </span>
                                 ) : <span className="text-gray-400 text-xs">-</span>}
+                              </td>
+                              <td className="p-2 sm:p-3 text-xs text-gray-500 whitespace-nowrap">
+                                {s.submissionInfo?.submittedAt ? formatDate(s.submissionInfo.submittedAt) : '-'}
                               </td>
                               <td className="p-2 sm:p-3 text-xs text-gray-500 max-w-[120px] truncate" title={s.parent ? `${s.parent.firstName} ${s.parent.lastName}` : 'No parent linked'}>
                                 {s.parent ? `${s.parent.firstName} ${s.parent.lastName}` : <span className="text-gray-300">-</span>}
@@ -990,8 +1129,11 @@ export default function ExamOfficerDashboard() {
 
           {!studentListClassId && !studentListLoading && (
             <div className="text-center py-8">
-              <p className="text-gray-400 text-sm">Select a class from the dropdown above to view its student list.</p>
+              <p className="text-gray-400 text-sm">Select a class from the dropdown above to view its student list and metadata.</p>
             </div>
+          )}
+
+            </>
           )}
         </div>
       )}

@@ -1,4 +1,4 @@
-const { Student, Class, Result, ResultDetail, Subject, AcademicSession, Term, SubjectAssignment } = require('../models')
+const { Student, Class, Result, ResultDetail, Subject, AcademicSession, Term, SubjectAssignment, ClassTeacher } = require('../models')
 const { isString, escapeRegex, isValidObjectId, sanitizeString } = require('../utils/sanitize')
 const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 
@@ -266,7 +266,7 @@ exports.getClassStudentList = async (req, res) => {
         student: { $in: currentStudentIds },
         session: currentSession._id,
         term: currentTerm._id
-      }).select('_id student status')
+      }).select('_id student status updatedAt')
 
       if (results.length > 0) {
         resultDetails = await ResultDetail.find({
@@ -319,6 +319,7 @@ exports.getClassStudentList = async (req, res) => {
           totalSubjects: subjects.length,
           submittedSubjects: submittedCount,
           resultStatus: result.status,
+          submittedAt: result.updatedAt,
         }
       } else if (isActive && currentTerm) {
         submissionInfo = {
@@ -345,15 +346,149 @@ exports.getClassStudentList = async (req, res) => {
       return acc
     }, [])
 
+    const formTeacher = await ClassTeacher.findOne({ class: classId }).populate('user', 'firstName lastName email')
+
+    const classHistory = await Student.aggregate([
+      { $match: { class: classRecord._id } },
+      {
+        $group: {
+          _id: '$session',
+          count: { $addToSet: '$regNo' },
+        }
+      },
+      {
+        $lookup: {
+          from: 'academicsessions',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'session'
+        }
+      },
+      { $unwind: { path: '$session', preserveNullAndEmptyArrays: true } },
+      { $project: { sessionName: '$session.name', count: { $size: '$count' } } },
+      { $sort: { sessionName: -1 } }
+    ])
+
+    const activeStudentCount = studentList.filter(s => s.status === 'ACTIVE').length
+    const transferredCount = studentList.filter(s => s.status === 'TRANSFERRED').length
+    const graduatedCount = studentList.filter(s => s.status === 'GRADUATED').length
+
     res.json({
       className: classRecord.name,
       currentSession: { _id: currentSession._id, name: currentSession.name },
       currentTerm: currentTerm ? { _id: currentTerm._id, name: currentTerm.name } : null,
       subjects: subjects.map(s => ({ _id: s._id, name: s.name })),
       students: studentList,
+      formTeacher: formTeacher ? { name: `${formTeacher.user.firstName} ${formTeacher.user.lastName}`, email: formTeacher.user.email } : null,
+      classHistory,
+      stats: {
+        activeCount: activeStudentCount,
+        transferredCount,
+        graduatedCount,
+        totalSubjects: subjects.length,
+        totalStudents: studentList.length,
+      },
     })
   } catch (error) {
     console.error('getClassStudentList error:', error.message)
+    res.status(500).json({ message: 'Server error', error: 'Internal error' })
+  }
+}
+
+exports.getGraduatedStudents = async (req, res) => {
+  try {
+    const currentSession = await AcademicSession.findOne({ isCurrent: true })
+    if (!currentSession) return res.json({ students: [] })
+
+    const currentRegNos = await Student.distinct('regNo', { session: currentSession._id })
+    const allRegNos = await Student.distinct('regNo')
+    const graduatedRegNos = allRegNos.filter(r => !currentRegNos.includes(r))
+
+    if (graduatedRegNos.length === 0) return res.json({ students: [] })
+
+    const pipeline = [
+      { $match: { regNo: { $in: graduatedRegNos } } },
+      { $sort: { createdAt: -1 } },
+      { $group: { _id: '$regNo', doc: { $first: '$$ROOT' } } },
+      { $replaceRoot: { newRoot: '$doc' } },
+      {
+        $lookup: {
+          from: 'classes',
+          localField: 'class',
+          foreignField: '_id',
+          as: 'class'
+        }
+      },
+      { $unwind: { path: '$class', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'academicsessions',
+          localField: 'session',
+          foreignField: '_id',
+          as: 'session'
+        }
+      },
+      { $unwind: { path: '$session', preserveNullAndEmptyArrays: true } },
+    ]
+
+    const graduated = await Student.aggregate(pipeline)
+
+    const studentIds = graduated.map(s => s._id)
+    const results = await Result.find({ student: { $in: studentIds } })
+      .populate('term', 'name')
+      .sort({ createdAt: -1 })
+
+    const lastResultMap = {}
+    for (const r of results) {
+      const sid = r.student.toString()
+      if (!lastResultMap[sid]) lastResultMap[sid] = r
+    }
+
+    const resultIds = [...new Set(results.map(r => r._id))]
+    const details = await ResultDetail.find({ result: { $in: resultIds } })
+      .populate('subject', 'name')
+      .sort({ createdAt: -1 })
+
+    const detailsByResult = {}
+    for (const d of details) {
+      const rid = d.result.toString()
+      if (!detailsByResult[rid]) detailsByResult[rid] = []
+      detailsByResult[rid].push(d)
+    }
+
+    const studentList = graduated.map(s => {
+      const lastResult = lastResultMap[s._id.toString()]
+      const lastDetails = lastResult ? detailsByResult[lastResult._id.toString()] || [] : []
+
+      return {
+        _id: s._id,
+        regNo: s.regNo,
+        firstName: s.firstName,
+        lastName: s.lastName,
+        gender: s.gender,
+        arm: s.arm,
+        lastClass: s.class?.name || 'Unknown',
+        lastSession: s.session?.name || 'Unknown',
+        graduatedAt: s.createdAt,
+        lastGrades: lastDetails.map(d => ({
+          subject: d.subject?.name || 'Unknown',
+          ca: d.ca,
+          exam: d.exam,
+          total: d.total,
+          grade: d.grade,
+        })),
+        lastResult: lastResult ? {
+          term: lastResult.term?.name || 'Unknown',
+          status: lastResult.status,
+          totalObtained: lastDetails.reduce((sum, d) => sum + (d.total || 0), 0),
+          totalSubjects: lastDetails.length,
+        } : null,
+      }
+    })
+
+    res.json({ students: studentList, total: studentList.length })
+  } catch (error) {
+    console.error('getGraduatedStudents error:', error.message)
     res.status(500).json({ message: 'Server error', error: 'Internal error' })
   }
 }
