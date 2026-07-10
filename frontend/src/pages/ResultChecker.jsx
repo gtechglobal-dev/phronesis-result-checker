@@ -111,14 +111,22 @@ export default function ResultChecker() {
       el.style.transformOrigin = 'top left'
       el.style.transform = `scale(${scale})`
       el.style.width = `${100 / scale}%`
-      const cleanup = () => {
+      const cleanupScale = () => {
         el.style.transform = ''
         el.style.transformOrigin = ''
         el.style.width = ''
-        window.removeEventListener('afterprint', cleanup)
+        window.removeEventListener('afterprint', cleanupScale)
       }
-      window.addEventListener('afterprint', cleanup)
+      window.addEventListener('afterprint', cleanupScale)
     }
+
+    const origTitle = document.title
+    document.title = `${student.lastName} ${student.firstName} - ${result.term?.name} Result`
+    const cleanupTitle = () => {
+      document.title = origTitle
+      window.removeEventListener('afterprint', cleanupTitle)
+    }
+    window.addEventListener('afterprint', cleanupTitle)
 
     window.print()
   }
@@ -390,23 +398,23 @@ export default function ResultChecker() {
               {/* ATTENDANCE + SUMMARY ROW */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-5 print-stats">
                 <div className="bg-gray-50 rounded-lg p-3 flex flex-col items-center justify-center">
-                  <p className="text-[18px] font-bold text-gray-900">{result.daysOpen ?? '-'}</p>
+                  <p className="text-[18px] font-bold text-gray-900 text-center">{result.daysOpen ?? '-'}</p>
                   <p className="text-[10px] text-gray-500 uppercase tracking-wide text-center">No of times school Opened</p>
                 </div>
                 <div className="bg-green-50 rounded-lg p-3 flex flex-col items-center justify-center">
-                  <p className="text-[18px] font-bold text-green-700">{result.daysPresent ?? '-'}</p>
+                  <p className="text-[18px] font-bold text-green-700 text-center">{result.daysPresent ?? '-'}</p>
                   <p className="text-[10px] text-green-600 uppercase tracking-wide text-center">No of Times Present</p>
                 </div>
                 <div className="bg-red-50 rounded-lg p-3 flex flex-col items-center justify-center">
-                  <p className="text-[18px] font-bold text-red-700">{result.daysAbsent ?? '-'}</p>
+                  <p className="text-[18px] font-bold text-red-700 text-center">{result.daysAbsent ?? '-'}</p>
                   <p className="text-[10px] text-red-600 uppercase tracking-wide text-center">No of Times Absent</p>
                 </div>
                 <div className="bg-[#1B5E20]/5 rounded-lg p-3 flex flex-col items-center justify-center">
-                  <p className="text-[18px] font-bold text-[#1B5E20]">{result.classStudentCount ?? '—'}</p>
+                  <p className="text-[18px] font-bold text-[#1B5E20] text-center">{result.classStudentCount ?? '—'}</p>
                   <p className="text-[10px] text-gray-500 uppercase tracking-wide text-center">Students in Class</p>
                 </div>
                 <div className="bg-[#1B5E20]/5 rounded-lg p-3 flex flex-col items-center justify-center">
-                  <p className="text-[18px] font-bold text-gray-900">{result.nextResumptionDate ? new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
+                  <p className="text-[18px] font-bold text-gray-900 text-center">{result.nextResumptionDate ? new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
                   <p className="text-[10px] text-gray-500 uppercase tracking-wide text-center">Resumption Date</p>
                 </div>
               </div>
