@@ -87,6 +87,7 @@ export default function ResultChecker() {
   const [student, setStudent] = useState(null)
   const [loading, setLoading] = useState(false)
   const [modal, setModal] = useState({ show: false, type: '', title: '', message: '' })
+  const [classModal, setClassModal] = useState(false)
 
   const initialLoad = useRef(true)
   const resultSheetRef = useRef(null)
@@ -360,7 +361,7 @@ export default function ResultChecker() {
 
               {/* ATTENDANCE + SUMMARY ROW */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5 print-stats">
-                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="bg-gray-50 rounded-lg p-3 text-center cursor-pointer hover:bg-gray-100 transition" onClick={() => setClassModal(true)}>
                   <p className="text-[18px] font-bold text-gray-900">{result.daysOpen ?? '-'}</p>
                   <p className="text-[10px] text-gray-500 uppercase tracking-wide">No of times school Opened</p>
                 </div>
@@ -377,6 +378,25 @@ export default function ResultChecker() {
                   <p className="text-[18px] font-bold text-gray-900">{result.nextResumptionDate ? new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
                 </div>
               </div>
+
+              {classModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setClassModal(false)}>
+                  <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-xs text-center" onClick={(e) => e.stopPropagation()}>
+                    <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-[#1B5E20]/10 flex items-center justify-center">
+                      <svg className="w-7 h-7 text-[#1B5E20]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-1">{result.class?.name}</h3>
+                    <p className="text-gray-500 text-sm mb-4">Number of Students in Class</p>
+                    <p className="text-4xl font-bold text-[#1B5E20]">{result.classStudentCount ?? '—'}</p>
+                    <button onClick={() => setClassModal(false)}
+                      className="mt-5 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 rounded-lg transition text-sm">
+                      Close
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* REMARKS */}
               <div className="mb-5 space-y-3 print-remarks">

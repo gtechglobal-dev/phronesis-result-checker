@@ -252,6 +252,7 @@ exports.checkByRegNo = async (req, res) => {
     const details = result.details || []
     const avg = result.average ?? (details.length ? Math.round(details.reduce((s, d) => s + (d.total ?? 0), 0) / details.length * 100) / 100 : 0)
     const termData = await Term.findById(termId)
+    const classStudentCount = await Student.countDocuments({ class: student.class._id || student.class })
     res.json({
       student: {
         _id: student._id,
@@ -267,7 +268,8 @@ exports.checkByRegNo = async (req, res) => {
         daysOpen: termData?.daysOpen,
         nextResumptionDate: termData?.nextResumptionDate,
         autoTeacherComment: getTeacherComment(avg),
-        autoPrincipalRemark: getPrincipalRemark(avg)
+        autoPrincipalRemark: getPrincipalRemark(avg),
+        classStudentCount,
       }
     })
   } catch (error) {
