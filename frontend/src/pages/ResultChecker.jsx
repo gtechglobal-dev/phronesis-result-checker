@@ -349,7 +349,7 @@ export default function ResultChecker() {
                 </div>
                 <div className="col-span-2 sm:col-span-1 bg-[#1B5E20]/5 rounded-lg p-3 text-center flex flex-col items-center justify-center">
                   <p className="text-[10px] text-gray-500 uppercase tracking-wide">Resumption Date</p>
-                  <p className="text-[11px] font-bold text-gray-900">{result.nextResumptionDate ? new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
+                  <p className="text-[18px] font-bold text-gray-900">{result.nextResumptionDate ? new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
                 </div>
               </div>
 
