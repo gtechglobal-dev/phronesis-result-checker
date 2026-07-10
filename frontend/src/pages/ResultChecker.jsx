@@ -13,15 +13,42 @@ const PRINT_STYLES = `
       padding: 0;
       margin: 0;
       box-shadow: none;
-      border: none;
+      border-radius: 0;
     }
     .no-print { display: none !important; }
-    #result-sheet { padding: 8mm 10mm !important; }
+    .no-print-wrapper { background: white !important; padding: 0 !important; }
+    #result-sheet::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: url('/school logo.png');
+      background-repeat: repeat;
+      background-size: 80px;
+      opacity: 0.06;
+      pointer-events: none;
+      z-index: 0;
+    }
+    #result-sheet > * { position: relative; z-index: 1; }
   }
-  @page {
-    size: A4 portrait;
-    margin: 8mm;
+`
+
+const WATERMARK_STYLES = `
+  #result-sheet {
+    position: relative;
+    overflow: hidden;
   }
+  #result-sheet::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url('/school logo.png');
+    background-repeat: repeat;
+    background-size: 80px;
+    opacity: 0.05;
+    pointer-events: none;
+    z-index: 0;
+  }
+  #result-sheet > * { position: relative; z-index: 1; }
 `
 
 export default function ResultChecker() {
@@ -225,6 +252,7 @@ export default function ResultChecker() {
             <div id="result-sheet"
               className="bg-white shadow-xl mx-auto rounded-none sm:rounded-2xl p-4 sm:p-8 md:p-10 lg:p-12"
               style={{ width: '100%', maxWidth: '210mm' }}>
+              <style>{WATERMARK_STYLES}</style>
 
               {/* HEADER */}
               <div className="text-center border-b-2 border-[#1B5E20] pb-3 mb-4">
@@ -309,18 +337,18 @@ export default function ResultChecker() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
                 <div className="bg-gray-50 rounded-lg p-3 text-center">
                   <p className="text-[18px] font-bold text-gray-900">{result.daysOpen ?? '-'}</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">Days Open</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">No of times school Opened</p>
                 </div>
                 <div className="bg-green-50 rounded-lg p-3 text-center">
                   <p className="text-[18px] font-bold text-green-700">{result.daysPresent ?? '-'}</p>
-                  <p className="text-[10px] text-green-600 uppercase tracking-wide">Present</p>
+                  <p className="text-[10px] text-green-600 uppercase tracking-wide">No of Times Present</p>
                 </div>
                 <div className="bg-red-50 rounded-lg p-3 text-center">
                   <p className="text-[18px] font-bold text-red-700">{result.daysAbsent ?? '-'}</p>
-                  <p className="text-[10px] text-red-600 uppercase tracking-wide">Absent</p>
+                  <p className="text-[10px] text-red-600 uppercase tracking-wide">No of Times Absent</p>
                 </div>
                 <div className="col-span-2 sm:col-span-1 bg-[#1B5E20]/5 rounded-lg p-3 text-center">
-                  <p className="text-[11px] font-semibold text-gray-700 leading-tight">Next Resumption</p>
+                  <p className="text-[11px] font-semibold text-gray-700 leading-tight">Resumption Date</p>
                   <p className="text-[11px] font-bold text-gray-900">{result.nextResumptionDate ? new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
                 </div>
               </div>

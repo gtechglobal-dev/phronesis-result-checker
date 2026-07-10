@@ -913,13 +913,13 @@ export default function FormTeacherDashboard() {
 
           <div className="grid sm:grid-cols-2 gap-4 mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Days School Opened (this term)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">No of times school Opened</label>
               <input type="number" min="0" value={daysOpen}
                 onChange={(e) => setDaysOpen(e.target.value)}
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" placeholder="e.g., 90" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Next Resumption Date</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Resumption Date</label>
               <input type="date" value={nextResDate}
                 onChange={(e) => setNextResDate(e.target.value)}
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" />
@@ -941,8 +941,8 @@ export default function FormTeacherDashboard() {
                     <th className="text-left p-2 font-medium text-gray-600">S/N</th>
                     <th className="text-left p-2 font-medium text-gray-600">Student Name</th>
                     <th className="text-center p-2 font-medium text-gray-600">Reg No</th>
-                    <th className="text-center p-2 font-medium text-gray-600">Times Present</th>
-                    <th className="text-center p-2 font-medium text-gray-600">Times Absent</th>
+                    <th className="text-center p-2 font-medium text-gray-600">No of Times Present</th>
+                    <th className="text-center p-2 font-medium text-gray-600">No of Times Absent</th>
                   </tr>
                 </thead>
                 <tbody>
