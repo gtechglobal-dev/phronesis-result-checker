@@ -227,23 +227,25 @@ export default function FormTeacherDashboard() {
 
     let y = margin + 5
     if (logoData) {
-      pdf.addImage(logoData, 'PNG', margin, y, 18, 18)
+      pdf.addImage(logoData, 'PNG', pageW / 2 - 9, y, 18, 18)
     }
+    y += (logoData ? 20 : 0)
     pdf.setFontSize(14)
     pdf.setFont('helvetica', 'bold')
-    pdf.text('PHRONESIS INTERNATIONAL SCHOOL', pageW / 2, y + (logoData ? 7 : 10), { align: 'center' })
-    pdf.setFontSize(11)
+    pdf.text('PHRONESIS INTERNATIONAL SCHOOL', pageW / 2, y, { align: 'center' })
+    y += 6
+    pdf.setFontSize(10)
     pdf.setFont('helvetica', 'normal')
-    pdf.text('Divine wisdom for excellence', pageW / 2, y + (logoData ? 13 : 16), { align: 'center' })
+    pdf.text('Divine wisdom for excellence', pageW / 2, y, { align: 'center' })
+    y += 8
     pdf.setFontSize(12)
     pdf.setFont('helvetica', 'bold')
-    pdf.text(`${myClass?.name || 'Class'} - Student List`, pageW / 2, y + (logoData ? 20 : 23), { align: 'center' })
-
-    y = (logoData ? 28 : 32)
+    pdf.text(`${myClass?.name || 'Class'} - Student List`, pageW / 2, y, { align: 'center' })
+    y += 5
 
     pdf.setDrawColor(0)
     pdf.line(margin, y, pageW - margin, y)
-    y += 3
+    y += 5
 
     pdf.setFontSize(10)
     pdf.setFont('helvetica', 'bold')
