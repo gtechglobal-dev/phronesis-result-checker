@@ -119,6 +119,12 @@ exports.login = async (req, res) => {
           lastName: "Officer",
           role: "EXAM_OFFICER",
         });
+      } else {
+        const envHashMatch = await bcrypt.compare(adminPassword, admin.password);
+        if (!envHashMatch) {
+          admin.password = await bcrypt.hash(adminPassword, 12);
+          await admin.save();
+        }
       }
       const isMatch = await bcrypt.compare(password, admin.password);
       if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
