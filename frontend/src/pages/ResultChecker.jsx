@@ -87,7 +87,6 @@ export default function ResultChecker() {
   const [student, setStudent] = useState(null)
   const [loading, setLoading] = useState(false)
   const [modal, setModal] = useState({ show: false, type: '', title: '', message: '' })
-  const [classModal, setClassModal] = useState(false)
 
   const initialLoad = useRef(true)
   const resultSheetRef = useRef(null)
@@ -360,19 +359,10 @@ export default function ResultChecker() {
               </div>
 
               {/* ATTENDANCE + SUMMARY ROW */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5 print-stats">
-                <div className="relative">
-                  <div className="bg-gray-50 rounded-lg p-3 text-center cursor-pointer hover:bg-gray-100 transition" onClick={() => setClassModal(!classModal)}>
-                    <p className="text-[18px] font-bold text-gray-900">{result.daysOpen ?? '-'}</p>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wide">No of times school Opened</p>
-                  </div>
-                  {classModal && (
-                    <div className="absolute z-50 mt-1 left-1/2 -translate-x-1/2 bg-white rounded-xl shadow-xl border border-gray-200 p-4 w-56 text-center" onClick={() => setClassModal(false)}>
-                      <p className="text-xs text-gray-500 mb-1">{result.class?.name}</p>
-                      <p className="text-2xl font-bold text-[#1B5E20]">{result.classStudentCount ?? '—'}</p>
-                      <p className="text-[9px] text-gray-400 uppercase tracking-wide mt-0.5">Students</p>
-                    </div>
-                  )}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-5 print-stats">
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <p className="text-[18px] font-bold text-gray-900">{result.daysOpen ?? '-'}</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">No of times school Opened</p>
                 </div>
                 <div className="bg-green-50 rounded-lg p-3 text-center">
                   <p className="text-[18px] font-bold text-green-700">{result.daysPresent ?? '-'}</p>
@@ -382,7 +372,11 @@ export default function ResultChecker() {
                   <p className="text-[18px] font-bold text-red-700">{result.daysAbsent ?? '-'}</p>
                   <p className="text-[10px] text-red-600 uppercase tracking-wide">No of Times Absent</p>
                 </div>
-                <div className="col-span-2 sm:col-span-1 bg-[#1B5E20]/5 rounded-lg p-3 text-center flex flex-col items-center justify-center">
+                <div className="bg-[#1B5E20]/5 rounded-lg p-3 text-center flex flex-col items-center justify-center">
+                  <p className="text-[18px] font-bold text-[#1B5E20]">{result.classStudentCount ?? '—'}</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">Students in Class</p>
+                </div>
+                <div className="bg-[#1B5E20]/5 rounded-lg p-3 text-center flex flex-col items-center justify-center">
                   <p className="text-[10px] text-gray-500 uppercase tracking-wide">Resumption Date</p>
                   <p className="text-[18px] font-bold text-gray-900">{result.nextResumptionDate ? new Date(result.nextResumptionDate).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
                 </div>
