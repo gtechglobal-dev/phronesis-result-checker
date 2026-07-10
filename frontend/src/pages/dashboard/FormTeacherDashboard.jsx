@@ -201,7 +201,7 @@ export default function FormTeacherDashboard() {
     XLSX.writeFile(wb, `${myClass?.name || 'class'}_students.xlsx`)
   }
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!studentList.length) return
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
     const pageW = pdf.internal.pageSize.getWidth()
@@ -209,7 +209,42 @@ export default function FormTeacherDashboard() {
     const colW = [(pageW - margin * 2) * 0.08, (pageW - margin * 2) * 0.4, (pageW - margin * 2) * 0.17, (pageW - margin * 2) * 0.35]
     const rowH = 8
     const header = ['S/N', 'NAMES', 'GENDER', 'EXAM NUMBER']
-    let y = margin + 10
+
+    const loadLogo = () => new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0)
+        resolve(canvas.toDataURL('image/png'))
+      }
+      img.onerror = () => resolve(null)
+      img.src = '/school logo.png'
+    })
+    const logoData = await loadLogo()
+
+    let y = margin + 5
+    if (logoData) {
+      pdf.addImage(logoData, 'PNG', margin, y, 18, 18)
+    }
+    pdf.setFontSize(14)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('PHRONESIS INTERNATIONAL SCHOOL', pageW / 2, y + (logoData ? 7 : 10), { align: 'center' })
+    pdf.setFontSize(11)
+    pdf.setFont('helvetica', 'normal')
+    pdf.text('Divine wisdom for excellence', pageW / 2, y + (logoData ? 13 : 16), { align: 'center' })
+    pdf.setFontSize(12)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text(`${myClass?.name || 'Class'} - Student List`, pageW / 2, y + (logoData ? 20 : 23), { align: 'center' })
+
+    y = (logoData ? 28 : 32)
+
+    pdf.setDrawColor(0)
+    pdf.line(margin, y, pageW - margin, y)
+    y += 3
+
     pdf.setFontSize(10)
     pdf.setFont('helvetica', 'bold')
     header.forEach((h, i) => {
