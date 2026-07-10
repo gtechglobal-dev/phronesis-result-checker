@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import { resultAPI } from '../services/api'
 
 const PRINT_STYLES = `
-  @page { size: A4 portrait; margin: 5mm; }
+  @page { size: A4 portrait; margin: 10mm; }
   @media print {
+    html, body { margin: 0; padding: 0; }
     body * { visibility: hidden; }
+    #print-watermark, #print-watermark * { visibility: visible; }
     #result-sheet, #result-sheet * { visibility: visible; }
     #result-sheet {
       position: absolute;
@@ -15,38 +17,45 @@ const PRINT_STYLES = `
       margin: 0;
       box-shadow: none;
       border-radius: 0;
+      transform-origin: top left;
     }
-    .no-print { display: none !important; }
-    .no-print-wrapper { background: white !important; padding: 0 !important; }
-    #result-sheet::before {
-      content: '';
-      position: absolute;
+    #result-sheet > * { position: relative; z-index: 1; }
+    #print-watermark {
+      visibility: visible !important;
+      position: fixed;
       inset: 0;
+      z-index: 0;
+    }
+    #print-watermark::before {
+      content: '';
+      display: block;
+      width: 100%;
+      height: 100%;
       background-image: url('/school logo.png');
       background-repeat: repeat;
       background-size: 80px;
       opacity: 0.06;
       pointer-events: none;
-      z-index: 0;
     }
-    #result-sheet > * { position: relative; z-index: 1; }
+    .no-print { display: none !important; }
+    .no-print-wrapper { background: white !important; padding: 0 !important; }
     #result-sheet .print-header { margin-bottom: 2mm; padding-bottom: 1mm; }
-    #result-sheet .print-header h1 { font-size: 13pt !important; }
-    #result-sheet .print-header h2 { font-size: 9pt !important; margin-top: 1mm; }
+    #result-sheet .print-header h1 { font-size: 14pt !important; }
+    #result-sheet .print-header h2 { font-size: 10pt !important; margin-top: 1mm; }
     #result-sheet .print-header img { height: 35px !important; width: 35px !important; margin-bottom: 1mm; }
-    #result-sheet .print-header p { font-size: 7pt !important; }
-    #result-sheet .print-info { padding: 2mm !important; margin-bottom: 2mm !important; font-size: 7pt !important; }
-    #result-sheet .print-info h3 { font-size: 9pt !important; }
+    #result-sheet .print-header p { font-size: 8pt !important; }
+    #result-sheet .print-info { padding: 2mm !important; margin-bottom: 2mm !important; font-size: 8pt !important; }
+    #result-sheet .print-info h3 { font-size: 10pt !important; }
     #result-sheet .print-stats { margin-bottom: 2mm !important; gap: 1mm !important; }
     #result-sheet .print-stats > div { padding: 1.5mm !important; }
-    #result-sheet .print-stats p:first-child { font-size: 10pt !important; }
-    #result-sheet .print-stats p:last-child { font-size: 5pt !important; }
+    #result-sheet .print-stats p:first-child { font-size: 11pt !important; }
+    #result-sheet .print-stats p:last-child { font-size: 6pt !important; }
     #result-sheet .print-remarks { margin-bottom: 2mm !important; }
     #result-sheet .print-remarks > div { padding: 1.5mm !important; }
-    #result-sheet .print-remarks p { font-size: 7pt !important; }
-    #result-sheet .print-remarks h4 { font-size: 6pt !important; }
+    #result-sheet .print-remarks p { font-size: 8pt !important; }
+    #result-sheet .print-remarks h4 { font-size: 7pt !important; }
     #result-sheet .print-note { padding-top: 1mm; }
-    #result-sheet .print-note p { font-size: 7pt !important; }
+    #result-sheet .print-note p { font-size: 8pt !important; }
   }
 `
 
@@ -93,6 +102,24 @@ export default function ResultChecker() {
   const subjectCount = result?.details?.length || 0
 
   const handlePrint = () => {
+    const el = document.getElementById('result-sheet')
+    const contentH = el.scrollHeight
+    const maxPx = (297 - 20) * 3.78 // A4 height minus 10mm margins, converted to px
+
+    if (contentH > maxPx) {
+      const scale = maxPx / contentH
+      el.style.transformOrigin = 'top left'
+      el.style.transform = `scale(${scale})`
+      el.style.width = `${100 / scale}%`
+      const cleanup = () => {
+        el.style.transform = ''
+        el.style.transformOrigin = ''
+        el.style.width = ''
+        window.removeEventListener('afterprint', cleanup)
+      }
+      window.addEventListener('afterprint', cleanup)
+    }
+
     window.print()
   }
 
@@ -271,8 +298,10 @@ export default function ResultChecker() {
 
       {/* RESULT SHEET */}
       {result && student && (
-        <div className="min-h-screen bg-gray-100 py-3 px-3 sm:py-8 sm:px-4 no-print-wrapper">
-          <div className="max-w-[210mm] mx-auto">
+        <>
+          <div id="print-watermark" aria-hidden="true"></div>
+          <div className="min-h-screen bg-gray-100 py-3 px-3 sm:py-8 sm:px-4 no-print-wrapper">
+            <div className="max-w-[210mm] mx-auto">
             <div id="result-sheet" ref={resultSheetRef}
               className="bg-white shadow-xl mx-auto rounded-none sm:rounded-2xl p-4 sm:p-8 md:p-10 lg:p-12"
               style={{ width: '100%', maxWidth: '210mm' }}>
@@ -416,7 +445,8 @@ export default function ResultChecker() {
             </div>
           </div>
         </div>
-      )}
+          </>
+        )}
     </>
   )
 }
