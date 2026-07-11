@@ -8,3 +8,10 @@ createRoot(document.getElementById('root')).render(
     <App />
   </StrictMode>,
 )
+
+const loader = document.getElementById('app-loader')
+if (loader) {
+  loader.style.opacity = '0'
+  loader.style.visibility = 'hidden'
+  setTimeout(() => loader.remove(), 500)
+}
