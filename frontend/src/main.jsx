@@ -11,7 +11,9 @@ createRoot(document.getElementById('root')).render(
 
 const loader = document.getElementById('app-loader')
 if (loader) {
-  loader.style.opacity = '0'
-  loader.style.visibility = 'hidden'
-  setTimeout(() => loader.remove(), 500)
+  setTimeout(() => {
+    loader.style.opacity = '0'
+    loader.style.visibility = 'hidden'
+    setTimeout(() => loader.remove(), 500)
+  }, 6000)
 }
