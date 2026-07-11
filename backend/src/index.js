@@ -38,7 +38,8 @@ app.use(express.json({ limit: '10kb' }))
 app.use(mongoSanitize())
 
 app.get('/wakeup', (req, res) => {
-  res.json({ status: 'ok' })
+  res.set('Content-Type', 'text/plain')
+  res.send('ok')
 })
 
 app.use('/api/', apiLimiter)
