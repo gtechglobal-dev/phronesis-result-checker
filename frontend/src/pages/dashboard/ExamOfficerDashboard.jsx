@@ -1997,9 +1997,27 @@ export default function ExamOfficerDashboard() {
           )}
 
           <div className="space-y-1.5 border-t pt-4">
-            <h4 className="font-semibold text-sm text-gray-700 mb-2">
-              Registered Subjects
-            </h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-semibold text-sm text-gray-700">
+                Registered Subjects
+              </h4>
+              {regClassSubjects.length > 0 && (
+                <button
+                  onClick={() => {
+                    const text = regClassSubjects.map(s => s.name).join(", ");
+                    navigator.clipboard.writeText(text).then(() => {
+                      setCopyMessage({ type: "success", text: "Subjects copied to clipboard" });
+                    }).catch(() => {
+                      setCopyMessage({ type: "error", text: "Failed to copy" });
+                    });
+                  }}
+                  className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-[#1B5E20] transition font-medium"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                  Copy
+                </button>
+              )}
+            </div>
             {subjectRegForm.classId && subjectRegForm.sessionId ? (
               regClassSubjectsLoading ? (
                 <p className="text-gray-400 text-sm text-center py-4">
