@@ -21,6 +21,7 @@ router.put('/:id/withhold', protect, authorize('EXAM_OFFICER'), resultController
 router.put('/:id/status', protect, authorize('EXAM_OFFICER'), resultController.updateResultStatus)
 router.put('/:id/scores', protect, authorize('EXAM_OFFICER'), resultController.updateStudentScores)
 router.post('/publish/:sessionId/:termId/:classId', protect, authorize('EXAM_OFFICER'), resultController.publishClassResults)
+router.post('/send-for-review/:sessionId/:termId/:classId', protect, authorize('EXAM_OFFICER'), resultController.sendForReview)
 router.post('/positions', protect, authorize('EXAM_OFFICER'), resultController.updatePositions)
 router.get('/archive/sessions', protect, authorize('EXAM_OFFICER'), resultController.getArchiveSessions)
 router.get('/archive/sessions/:sessionId/terms/:termId/classes', protect, authorize('EXAM_OFFICER'), resultController.getArchiveClasses)

@@ -67,6 +67,7 @@ export default function FormTeacherDashboard() {
   const [showTransferConfirm, setShowTransferConfirm] = useState(false)
   const [prevSessionId, setPrevSessionId] = useState('')
   const [transferMessage, setTransferMessage] = useState(null)
+  const [publishedNotification, setPublishedNotification] = useState(null)
   const [availableClasses, setAvailableClasses] = useState([])
   const [transferTargetClassId, setTransferTargetClassId] = useState('')
   const [showAllTransfer, setShowAllTransfer] = useState(false)
@@ -77,6 +78,13 @@ export default function FormTeacherDashboard() {
       return () => clearTimeout(t)
     }
   }, [transferMessage])
+
+  useEffect(() => {
+    if (publishedNotification) {
+      const t = setTimeout(() => setPublishedNotification(null), 8000)
+      return () => clearTimeout(t)
+    }
+  }, [publishedNotification])
 
   const loadTransferSources = useCallback(async () => {
     if (!myClass || !sessions.length || !selectedSession) return
@@ -205,8 +213,9 @@ export default function FormTeacherDashboard() {
     if (!studentList.length) return
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
     const pageW = pdf.internal.pageSize.getWidth()
-    const margin = 10
-    const colW = [(pageW - margin * 2) * 0.08, (pageW - margin * 2) * 0.4, (pageW - margin * 2) * 0.17, (pageW - margin * 2) * 0.35]
+    const margin = 15
+    const contentW = pageW - margin * 2
+    const colW = [contentW * 0.08, contentW * 0.38, contentW * 0.17, contentW * 0.37]
     const rowH = 8
     const header = ['S/N', 'NAMES', 'GENDER', 'EXAM NUMBER']
 
@@ -225,12 +234,14 @@ export default function FormTeacherDashboard() {
     })
     const logoData = await loadLogo()
 
-    let y = margin + 5
+    let y = margin
     if (logoData) {
-      pdf.addImage(logoData, 'PNG', pageW / 2 - 9, y, 18, 18)
+      const logoW = 22
+      const logoH = 22
+      pdf.addImage(logoData, 'PNG', pageW / 2 - logoW / 2, y, logoW, logoH)
+      y += logoH + 6
     }
-    y += (logoData ? 20 : 0)
-    pdf.setFontSize(14)
+    pdf.setFontSize(16)
     pdf.setFont('helvetica', 'bold')
     pdf.text('PHRONESIS INTERNATIONAL SCHOOL', pageW / 2, y, { align: 'center' })
     y += 6
@@ -238,14 +249,15 @@ export default function FormTeacherDashboard() {
     pdf.setFont('helvetica', 'normal')
     pdf.text('Divine wisdom for excellence', pageW / 2, y, { align: 'center' })
     y += 8
-    pdf.setFontSize(12)
+    pdf.setFontSize(13)
     pdf.setFont('helvetica', 'bold')
     pdf.text(`${myClass?.name || 'Class'} - Student List`, pageW / 2, y, { align: 'center' })
-    y += 5
+    y += 4
 
     pdf.setDrawColor(0)
+    pdf.setLineWidth(0.5)
     pdf.line(margin, y, pageW - margin, y)
-    y += 5
+    y += 6
 
     pdf.setFontSize(10)
     pdf.setFont('helvetica', 'bold')
@@ -341,6 +353,20 @@ export default function FormTeacherDashboard() {
   useSocketListener('result:withheld', refreshBroadsheet)
   useSocketListener('scores:saved', refreshBroadsheet)
   useSocketListener('scores:submitted', refreshBroadsheet)
+
+  useSocketListener('result:published', (data) => {
+    if (data.className) {
+      setPublishedNotification(data)
+      loadBroadsheet(true)
+    }
+  })
+
+  useSocketListener('result:sentForReview', (data) => {
+    if (data.className) {
+      setPublishedNotification({ ...data, type: 'review' })
+      loadBroadsheet(true)
+    }
+  })
 
   const loadSessions = async () => {
     try { const res = await classAPI.getSessions(); setSessions(res.data) } catch {}
@@ -542,135 +568,192 @@ export default function FormTeacherDashboard() {
     setTimeout(() => printWindow.print(), 500)
   }
 
-  const downloadBroadsheetPDF = () => {
+  const downloadBroadsheetPDF = async () => {
     if (!broadsheet) return
-    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm' })
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
     const pageW = pdf.internal.pageSize.getWidth()
     const pageH = pdf.internal.pageSize.getHeight()
     const margin = 8
+    const contentW = pageW - margin * 2
+
+    const loadLogo = () => new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0)
+        resolve(canvas.toDataURL('image/png'))
+      }
+      img.onerror = () => resolve(null)
+      img.src = '/school logo.png'
+    })
+    const logoData = await loadLogo()
+
+    const fixedW = 8 + 38 + 8
+    const summaryW = 14 + 11 + 9
+    const subjectsAreaW = contentW - fixedW - summaryW
+    const subCols = broadsheet.subjects.length * 4
+    const subColW = subCols > 0 ? subjectsAreaW / subCols : 10
+    const rowH = 5.5
 
     const colW = {
       sn: 8,
-      name: 42,
+      name: 38,
       gender: 8,
-      score: 14,
-      grandTotal: 16,
-      average: 13,
-      pos: 10,
+      score: subColW,
+      grandTotal: 14,
+      average: 11,
+      pos: 9,
     }
-    const subColW = colW.score
-    const rowH = 6.5
-
-    const totalW = colW.sn + colW.name + colW.gender
-      + broadsheet.subjects.length * 4 * subColW
-      + colW.grandTotal + colW.average + colW.pos
-    const scale = (pageW - margin * 2) / totalW
 
     const scaled = (key) => {
-      if (typeof key === 'number') return key * scale
-      return colW[key] * scale
+      if (typeof key === 'number') return key
+      return colW[key]
     }
 
     const drawRect = (x, y, w, h) => pdf.rect(x, y, w, h)
-    const cellText = (text, x, y, w, align = 'center') => {
-      const tx = align === 'left' ? x + 1.5 : x + w / 2
-      const displayText = typeof text === 'string' && text.length > 22 ? text.slice(0, 20) + '..' : String(text)
-      pdf.text(displayText, tx, y + rowH - 1.5, { align, maxWidth: w - 2 })
+    const cellText = (text, x, y, w, h, align = 'center') => {
+      const tx = align === 'left' ? x + 1 : x + w / 2
+      const maxLen = Math.floor(w / 1.8)
+      let displayText = String(text)
+      if (displayText.length > maxLen) displayText = displayText.slice(0, maxLen - 2) + '..'
+      pdf.text(displayText, tx, y + h - 1.2, { align, maxWidth: w - 2 })
     }
 
-    let y = margin + 12
-
-    const drawHeader = () => {
+    const drawHeaderBlock = (startY) => {
+      let y = startY
       pdf.setFontSize(7)
       pdf.setFont('helvetica', 'bold')
+
       let x = margin
+      drawRect(x, y, scaled('sn'), rowH * 2)
+      cellText('S/N', x, y, scaled('sn'), rowH * 2); x += scaled('sn')
 
-      drawRect(x, y - 5, scaled('sn'), rowH * 2)
-      cellText('S/N', x, y, scaled('sn')); x += scaled('sn')
+      drawRect(x, y, scaled('name'), rowH * 2)
+      cellText('NAMES', x, y, scaled('name'), rowH * 2); x += scaled('name')
 
-      drawRect(x, y - 5, scaled('name'), rowH * 2)
-      cellText('NAMES', x, y, scaled('name')); x += scaled('name')
-
-      drawRect(x, y - 5, scaled('gender'), rowH * 2)
-      cellText('G', x, y, scaled('gender')); x += scaled('gender')
+      drawRect(x, y, scaled('gender'), rowH * 2)
+      cellText('G', x, y, scaled('gender'), rowH * 2); x += scaled('gender')
 
       broadsheet.subjects.forEach(s => {
-        drawRect(x, y - 5, scaled(4 * subColW), rowH * 2)
-        cellText(s.name, x, y, scaled(4 * subColW))
-        x += scaled(4 * subColW)
+        drawRect(x, y, scaled('score') * 4, rowH * 2)
+        cellText(s.name, x, y, scaled('score') * 4, rowH * 2)
+        x += scaled('score') * 4
       })
 
-      drawRect(x, y - 5, scaled('grandTotal'), rowH * 2)
-      cellText('GRAND\nTOTAL', x, y, scaled('grandTotal')); x += scaled('grandTotal')
+      drawRect(x, y, scaled('grandTotal'), rowH * 2)
+      cellText('GRAND\nTOTAL', x, y, scaled('grandTotal'), rowH * 2); x += scaled('grandTotal')
 
-      drawRect(x, y - 5, scaled('average'), rowH * 2)
-      cellText('AVG', x, y, scaled('average')); x += scaled('average')
+      drawRect(x, y, scaled('average'), rowH * 2)
+      cellText('AVG', x, y, scaled('average'), rowH * 2); x += scaled('average')
 
-      drawRect(x, y - 5, scaled('pos'), rowH * 2)
-      cellText('POS', x, y, scaled('pos'))
-    }
+      drawRect(x, y, scaled('pos'), rowH * 2)
+      cellText('POS', x, y, scaled('pos'), rowH * 2)
 
-    const drawSubHeader = () => {
-      let x = margin + scaled('sn') + scaled('name') + scaled('gender')
-      pdf.setFontSize(5.5)
+      y += rowH
+      let sx = margin + scaled('sn') + scaled('name') + scaled('gender')
+      pdf.setFontSize(5)
       pdf.setFont('helvetica', 'bold')
       broadsheet.subjects.forEach(() => {
         ;['CA1', 'CA2', 'EXAM', 'TOT'].forEach(h => {
-          drawRect(x, y - 5, scaled('score'), rowH)
-          cellText(h, x, y, scaled('score'))
-          x += scaled('score')
+          drawRect(sx, y, scaled('score'), rowH)
+          cellText(h, sx, y, scaled('score'), rowH)
+          sx += scaled('score')
         })
       })
+
+      return y + rowH
     }
 
-    const drawRow = (row, i) => {
-      if (y + rowH * 2 > pageH - margin) {
-        pdf.addPage()
-        y = margin + 12
-        drawHeader()
-        y += rowH
-        drawSubHeader()
-      }
-      y += rowH
+    const drawStudentRow = (row, i, startY) => {
+      let y = startY
       let x = margin
-      pdf.setFontSize(5.5)
+      pdf.setFontSize(5)
       pdf.setFont('helvetica', 'normal')
 
-      drawRect(x, y - 5, scaled('sn'), rowH)
-      cellText(String(i + 1), x, y, scaled('sn')); x += scaled('sn')
+      drawRect(x, y, scaled('sn'), rowH)
+      cellText(String(i + 1), x, y, scaled('sn'), rowH); x += scaled('sn')
 
-      drawRect(x, y - 5, scaled('name'), rowH)
-      cellText(`${row.student.lastName} ${row.student.firstName}`, x, y, scaled('name'), 'left'); x += scaled('name')
+      drawRect(x, y, scaled('name'), rowH)
+      cellText(`${row.student.lastName} ${row.student.firstName}`, x, y, scaled('name'), rowH, 'left'); x += scaled('name')
 
-      drawRect(x, y - 5, scaled('gender'), rowH)
-      cellText(row.student.gender || '-', x, y, scaled('gender')); x += scaled('gender')
+      drawRect(x, y, scaled('gender'), rowH)
+      cellText(row.student.gender || '-', x, y, scaled('gender'), rowH); x += scaled('gender')
 
       broadsheet.subjects.forEach(s => {
         const d = row.details[s._id || s.id]
         const sv = (v) => d && d.submitted ? v : (v || '-')
         const vals = d ? [sv(d.ca1), sv(d.ca2), sv(d.exam), sv(d.total)] : ['-', '-', '-', '-']
         vals.forEach(v => {
-          drawRect(x, y - 5, scaled('score'), rowH)
-          cellText(String(v), x, y, scaled('score'))
+          drawRect(x, y, scaled('score'), rowH)
+          cellText(String(v), x, y, scaled('score'), rowH)
           x += scaled('score')
         })
       })
 
-      ;[
-        { label: row.totalScore, key: 'grandTotal' },
-        { label: row.average, key: 'average' },
-        { label: formatPosition(row.position), key: 'pos' },
-      ].forEach(({ label, key }) => {
-        drawRect(x, y - 5, scaled(key), rowH)
-        cellText(String(label), x, y, scaled(key))
-        x += scaled(key)
-      })
+      drawRect(x, y, scaled('grandTotal'), rowH)
+      cellText(String(row.totalScore), x, y, scaled('grandTotal'), rowH); x += scaled('grandTotal')
+
+      drawRect(x, y, scaled('average'), rowH)
+      cellText(String(row.average), x, y, scaled('average'), rowH); x += scaled('average')
+
+      drawRect(x, y, scaled('pos'), rowH)
+      cellText(formatPosition(row.position), x, y, scaled('pos'), rowH)
+
+      return y + rowH
     }
 
-    drawHeader()
-    y += rowH
-    drawSubHeader()
-    broadsheet.students.forEach((row, i) => drawRow(row, i))
+    let y = margin
+    if (logoData) {
+      const logoW = 16
+      const logoH = 16
+      pdf.addImage(logoData, 'PNG', margin, y, logoW, logoH)
+      y += logoH + 2
+    }
+    pdf.setFontSize(13)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('PHRONESIS INTERNATIONAL SCHOOL', margin, y)
+    y += 5
+    pdf.setFontSize(9)
+    pdf.setFont('helvetica', 'normal')
+    pdf.text('Divine wisdom for excellence', margin, y)
+    y += 5
+
+    const sessionName = sessions.find(s => (s._id || s.id) === selectedSession)?.name || ''
+    const termName = sessions.filter(s => (s._id || s.id) === selectedSession).flatMap(s => s.terms || []).find(t => (t._id || t.id) === selectedTerm)?.name || ''
+    pdf.setFontSize(10)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text(`${broadsheet.class.name} - RESULT BROADSHEET`, pageW - margin, margin + 4, { align: 'right' })
+    pdf.setFontSize(8)
+    pdf.setFont('helvetica', 'normal')
+    pdf.text(`${sessionName} | ${termName}`, pageW - margin, margin + 9, { align: 'right' })
+
+    pdf.setDrawColor(0)
+    pdf.setLineWidth(0.5)
+    pdf.line(margin, y, pageW - margin, y)
+    y += 4
+
+    y = drawHeaderBlock(y)
+    let currentY = y
+
+    broadsheet.students.forEach((row, i) => {
+      if (currentY + rowH > pageH - margin) {
+        pdf.addPage()
+        currentY = margin + 4
+        currentY = drawHeaderBlock(currentY)
+      }
+      currentY = drawStudentRow(row, i, currentY)
+    })
+
+    pdf.setDrawColor(0)
+    pdf.setLineWidth(0.3)
+    pdf.line(margin, currentY + 1, pageW - margin, currentY + 1)
+    pdf.setFontSize(7)
+    pdf.setFont('helvetica', 'italic')
+    pdf.text(`Generated on ${new Date().toLocaleDateString()} - Phronesis Int'l School Result Management System`, pageW / 2, currentY + 5, { align: 'center' })
+
     pdf.save(`${broadsheet.class.name}_broadsheet.pdf`)
   }
 
@@ -740,6 +823,45 @@ export default function FormTeacherDashboard() {
             }
           </svg>
           <span>{message.text}</span>
+        </div>
+      )}
+
+      {publishedNotification && (
+        <div className="fixed top-4 right-4 z-50 w-80 bg-white rounded-xl shadow-2xl border overflow-hidden"
+          style={{ animation: 'fadeInUp 0.3s ease-out', borderColor: publishedNotification.type === 'review' ? '#FCD34D' : '#86EFAC' }}>
+          <div className={`px-4 py-2.5 flex items-center justify-between ${publishedNotification.type === 'review' ? 'bg-yellow-500' : 'bg-green-600'}`}>
+            <div className="flex items-center gap-2">
+              {publishedNotification.type === 'review' ? (
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              <span className="text-white font-semibold text-sm">{publishedNotification.type === 'review' ? 'Sent for Review' : 'Results Published'}</span>
+            </div>
+            <button onClick={() => setPublishedNotification(null)} className="text-white/70 hover:text-white transition text-lg leading-none">&times;</button>
+          </div>
+          <div className="px-4 py-3 space-y-1.5">
+            <p className="text-xs text-gray-500">
+              {publishedNotification.type === 'review'
+                ? 'The exam officer has sent your results back for review:'
+                : 'The exam officer has published your results for:'}
+            </p>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-gray-800">{publishedNotification.className}</p>
+              <p className="text-xs text-gray-600">Session: <span className="font-medium">{publishedNotification.sessionName}</span></p>
+              <p className="text-xs text-gray-600">Term: <span className="font-medium">{publishedNotification.termName}</span></p>
+              <p className="text-xs text-gray-600">Students: <span className="font-medium">{publishedNotification.studentCount}</span></p>
+              {publishedNotification.withheldCount > 0 && (
+                <p className="text-xs text-red-600 font-medium">{publishedNotification.withheldCount} result(s) withheld</p>
+              )}
+              <p className="text-xs text-gray-400">{new Date(publishedNotification.publishedAt || publishedNotification.sentAt).toLocaleString()}</p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1147,7 +1269,7 @@ export default function FormTeacherDashboard() {
                 </button>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[calc(100vh-320px)]">
               <table id="student-list-table" className="w-full text-xs sm:text-sm">
                 <thead>
                   <tr className="bg-gray-50">
@@ -1232,6 +1354,19 @@ export default function FormTeacherDashboard() {
               {broadsheet.students.every(s => s.status === 'SUBMITTED') ? (
                 <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm font-medium">
                   This broadsheet has already been submitted to the exam officer.
+                </div>
+              ) : broadsheet.students.some(s => s.status === 'SUBMITTED') ? (
+                <div className="space-y-3">
+                  <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm font-medium flex items-center gap-2">
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    The exam officer sent this broadsheet back for review. Some results are still submitted. You can update scores and re-submit.
+                  </div>
+                  <button onClick={() => setShowSubmitModal(true)} disabled={submitting}
+                    className="bg-[#1B5E20] hover:bg-[#2E7D32] text-white px-8 py-2.5 rounded-lg font-semibold transition disabled:opacity-50 text-sm">
+                    {submitting ? 'Submitting...' : 'Re-Submit to Exam Officer'}
+                  </button>
                 </div>
               ) : (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">

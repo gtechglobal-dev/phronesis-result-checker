@@ -1,4 +1,4 @@
-const { Result, ResultDetail, Student, Class, AcademicSession, Term, ResultPin, User, Subject } = require('../models')
+const { Result, ResultDetail, Student, Class, AcademicSession, Term, ResultPin, User, Subject, ClassTeacher } = require('../models')
 const { isString, isValidObjectId, escapeRegex } = require('../utils/sanitize')
 const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 
@@ -514,16 +514,16 @@ exports.getPublishedSessions = async (req, res) => {
 
 exports.getArchiveSessions = async (req, res) => {
   try {
-    const sessions = await Result.distinct('session')
+    const sessions = await Result.distinct('session', { status: 'PUBLISHED' })
     const populated = await AcademicSession.find({ _id: { $in: sessions } })
       .populate('terms')
       .sort({ createdAt: -1 })
     const result = await Promise.all(populated.map(async (s) => {
-      const termIds = await Result.distinct('term', { session: s._id })
+      const termIds = await Result.distinct('term', { session: s._id, status: 'PUBLISHED' })
       const terms = s.terms.filter(t => termIds.some(id => id.toString() === t._id.toString()))
       const termData = await Promise.all(terms.map(async (t) => {
-        const classIds = await Result.distinct('class', { session: s._id, term: t._id })
-        const studentIds = await Result.distinct('student', { session: s._id, term: t._id })
+        const classIds = await Result.distinct('class', { session: s._id, term: t._id, status: 'PUBLISHED' })
+        const studentIds = await Result.distinct('student', { session: s._id, term: t._id, status: 'PUBLISHED' })
         const studentCount = studentIds.length
         return {
           _id: t._id, name: t.name,
@@ -543,14 +543,12 @@ exports.getArchiveSessions = async (req, res) => {
 exports.getArchiveClasses = async (req, res) => {
   try {
     const { sessionId, termId } = req.params
-    const classIds = await Result.distinct('class', { session: sessionId, term: termId })
+    const classIds = await Result.distinct('class', { session: sessionId, term: termId, status: 'PUBLISHED' })
     const classes = await Class.find({ _id: { $in: classIds } }).sort({ name: 1 })
     const result = await Promise.all(classes.map(async (c) => {
-      const studentIds = await Result.distinct('student', { session: sessionId, term: termId, class: c._id })
+      const studentIds = await Result.distinct('student', { session: sessionId, term: termId, class: c._id, status: 'PUBLISHED' })
       const studentCount = studentIds.length
-      const publishedStudentIds = await Result.distinct('student', { session: sessionId, term: termId, class: c._id, status: 'PUBLISHED' })
-      const publishedCount = publishedStudentIds.length
-      return { _id: c._id, name: c.name, level: c.level, studentCount, publishedCount }
+      return { _id: c._id, name: c.name, level: c.level, studentCount, publishedCount: studentCount }
     }))
     res.json(result)
   } catch (error) {
@@ -568,7 +566,7 @@ exports.getArchiveBroadsheet = async (req, res) => {
     const classSubjects = await Subject.find({ class: classId, session: sessionId }).sort({ createdAt: 1 })
     const students = await Student.find({ class: classId, session: sessionId }).sort({ lastName: 1 })
 
-    const results = await Result.find({ class: classId, session: sessionId, term: termId })
+    const results = await Result.find({ class: classId, session: sessionId, term: termId, status: 'PUBLISHED' })
       .populate('student')
       .populate({ path: 'details', populate: { path: 'subject' } })
 
@@ -725,7 +723,31 @@ exports.publishClassResults = async (req, res) => {
       { status: 'PUBLISHED' }
     )
     res.json({ message: `${result.modifiedCount} result(s) published`, count: result.modifiedCount })
-    try { emitToRole('EXAM_OFFICER', 'result:published', { sessionId, termId, classId }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
+    try {
+      const [sessionDoc, termDoc, classDoc, withheldCount] = await Promise.all([
+        AcademicSession.findById(sessionId),
+        Term.findById(termId),
+        Class.findById(classId),
+        Result.countDocuments({ class: classId, session: sessionId, term: termId, withheld: true })
+      ])
+      const classTeacher = await ClassTeacher.findOne({ class: classId })
+      const payload = {
+        sessionId,
+        termId,
+        classId,
+        sessionName: sessionDoc?.name || '',
+        termName: termDoc?.name || '',
+        className: classDoc?.name || '',
+        studentCount: result.modifiedCount,
+        withheldCount,
+        publishedAt: new Date().toISOString()
+      }
+      emitToRole('EXAM_OFFICER', 'result:published', payload)
+      if (classTeacher) {
+        emitToUser(classTeacher.user.toString(), 'result:published', payload)
+      }
+      emitBroadcast('entity:updated', { type: 'result' })
+    } catch (e) {}
   } catch (error) {
     console.error('publishClassResults error:', error.message)
     res.status(500).json({ message: 'Server error' })
@@ -741,6 +763,42 @@ exports.getWithheldResults = async (req, res) => {
     res.json(results)
   } catch (error) {
     console.error('getWithheldResults error:', error.message)
+    res.status(500).json({ message: 'Server error' })
+  }
+}
+
+exports.sendForReview = async (req, res) => {
+  try {
+    const { sessionId, termId, classId } = req.params
+    const result = await Result.updateMany(
+      { class: classId, session: sessionId, term: termId, status: 'SUBMITTED' },
+      { status: 'DRAFT' }
+    )
+    if (result.modifiedCount === 0) {
+      return res.status(400).json({ message: 'No submitted results found to send back for review' })
+    }
+    res.json({ message: `${result.modifiedCount} result(s) sent back for form teacher review`, count: result.modifiedCount })
+    try {
+      const classTeacher = await ClassTeacher.findOne({ class: classId })
+      if (classTeacher) {
+        const [sessionDoc, termDoc, classDoc] = await Promise.all([
+          AcademicSession.findById(sessionId),
+          Term.findById(termId),
+          Class.findById(classId)
+        ])
+        emitToUser(classTeacher.user.toString(), 'result:sentForReview', {
+          sessionId, termId, classId,
+          sessionName: sessionDoc?.name || '',
+          termName: termDoc?.name || '',
+          className: classDoc?.name || '',
+          studentCount: result.modifiedCount,
+          sentAt: new Date().toISOString()
+        })
+      }
+      emitBroadcast('entity:updated', { type: 'result' })
+    } catch (e) {}
+  } catch (error) {
+    console.error('sendForReview error:', error.message)
     res.status(500).json({ message: 'Server error' })
   }
 }

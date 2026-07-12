@@ -94,6 +94,7 @@ export const resultAPI = {
   updateStatus: (id, data) => api.put(`/results/${id}/status`, data),
   updateStudentScores: (id, data) => api.put(`/results/${id}/scores`, data),
   publishClassResults: (sessionId, termId, classId) => api.post(`/results/publish/${sessionId}/${termId}/${classId}`),
+  sendForReview: (sessionId, termId, classId) => api.post(`/results/send-for-review/${sessionId}/${termId}/${classId}`),
   getWithheldResults: () => api.get("/results/withheld"),
   getManageResults: (params) => api.get("/results/manage/all", { params }),
   updatePositions: (data) => api.post("/results/positions", data),

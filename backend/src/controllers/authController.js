@@ -350,7 +350,7 @@ exports.updateSubjectTeacherPassword = async (req, res) => {
     await User.updateMany({ role: "SUBJECT_TEACHER" }, { password: hashed });
     await SubjectTeacherConfig.findOneAndUpdate(
       {},
-      { passwordHash: hashed },
+      { passwordHash: hashed, passwordPlain: password },
       { upsert: true },
     );
     await User.findOneAndUpdate(
@@ -375,7 +375,7 @@ exports.getSubjectTeacherPasswordHash = async (req, res) => {
   try {
     const config = await SubjectTeacherConfig.findOne();
     if (config && config.passwordHash) {
-      return res.json({ password: "[set]" });
+      return res.json({ password: config.passwordPlain || "[set]" });
     }
     const teacher = await User.findOne({ role: "SUBJECT_TEACHER" }).select(
       "password",

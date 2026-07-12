@@ -123,6 +123,7 @@ export default function ExamOfficerDashboard() {
   const [editScores, setEditScores] = useState({});
   const [editSaving, setEditSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [sendingForReview, setSendingForReview] = useState(false);
 
   const [resultForm, setResultForm] = useState({
     studentId: "",
@@ -2232,6 +2233,38 @@ export default function ExamOfficerDashboard() {
                 <>
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-sm text-gray-500">{pendingBroadsheet.students.length} student(s)</p>
+                    <div className="flex gap-2">
+                    <button onClick={async () => {
+                      setConfirmModal({
+                        show: true,
+                        title: 'Send Back for Review?',
+                        message: `Send all results for ${pendingBroadsheet.class.name} back to the form teacher for review? The form teacher will be able to update scores and re-submit.`,
+                        confirmText: 'Send for Review',
+                        cancelText: 'Cancel',
+                        onConfirm: async () => {
+                          setSendingForReview(true);
+                          try {
+                            const res = await resultAPI.sendForReview(pendingSid, pendingTid, pendingBroadsheet.class.id);
+                            setMessage({ type: 'success', text: res.data.message || 'Sent back for form teacher review' });
+                            setPendingLevel('summary');
+                            setPendingBroadsheet(null);
+                            setPendingClasses([]);
+                            setPendingSid(null);
+                            setPendingTid(null);
+                            loadPendingSummary();
+                          } catch (err) {
+                            setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to send for review' });
+                          } finally {
+                            setSendingForReview(false);
+                          }
+                        }
+                      });
+                    }}
+                      disabled={sendingForReview}
+                      className="bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-yellow-600 transition disabled:opacity-50 flex items-center gap-2">
+                      {sendingForReview && <Spinner small />}
+                      {sendingForReview ? 'Sending...' : 'Send for Review'}
+                    </button>
                     <button onClick={async () => {
                       setConfirmModal({
                         show: true,
@@ -2264,6 +2297,7 @@ export default function ExamOfficerDashboard() {
                       {publishing && <Spinner small />}
                       {publishing ? 'Publishing...' : 'Publish Results'}
                     </button>
+                    </div>
                   </div>
                   <div className="overflow-auto max-h-[calc(100vh-380px)]">
                     <table className="w-full text-xs sm:text-sm border-collapse">
@@ -2993,9 +3027,7 @@ function TeacherAssignments({ setMessage, refreshKey }) {
   const [reassignLoading, setReassignLoading] = useState(false);
   const [reassignError, setReassignError] = useState("");
   const [allClasses, setAllClasses] = useState([]);
-  const [roleModal, setRoleModal] = useState(null);
-  const [roleLoading, setRoleLoading] = useState(false);
-  const [roleError, setRoleError] = useState("");
+
   const loadTeachers = () => {
     authAPI
       .getTeachers()
@@ -3110,12 +3142,6 @@ function TeacherAssignments({ setMessage, refreshKey }) {
                   Change Password
                 </button>
                 <button
-                  onClick={() => { setRoleModal(t); setRoleError(""); }}
-                  className="text-xs text-purple-600 hover:text-purple-800 font-medium"
-                >
-                  Change Role
-                </button>
-                <button
                   onClick={() =>
                     handleRemove(t._id, `${t.firstName} ${t.lastName}`)
                   }
@@ -3228,88 +3254,6 @@ function TeacherAssignments({ setMessage, refreshKey }) {
                 {pwLoading ? "Saving..." : "Save"}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-      {roleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setRoleModal(null)}
-          />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <h3 className="font-bold text-base text-[#1B5E20] mb-4">
-              Change Role
-            </h3>
-            {roleError && (
-              <div className="mb-3 p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs">
-                {roleError}
-              </div>
-            )}
-            <p className="text-sm text-gray-600 mb-4">
-              Current role:{" "}
-              <strong>
-                {roleModal.role === "SUBJECT_TEACHER"
-                  ? "Subject Teacher"
-                  : "Form Teacher"}
-              </strong>
-            </p>
-            <div className="flex gap-3 mb-4">
-              <button
-                onClick={async () => {
-                  setRoleError("");
-                  setRoleLoading(true);
-                  try {
-                    await authAPI.updateTeacherRole(roleModal._id, {
-                      role: "FORM_TEACHER",
-                    });
-                    setRoleModal(null);
-                    loadTeachers();
-                    setMessage("Role updated to Form Teacher");
-                  } catch (err) {
-                    setRoleError(
-                      err.response?.data?.message || "Error updating role",
-                    );
-                  } finally {
-                    setRoleLoading(false);
-                  }
-                }}
-                disabled={roleModal.role === "FORM_TEACHER" || roleLoading}
-                className="flex-1 bg-blue-100 text-blue-700 py-2 rounded-lg text-sm font-medium hover:bg-blue-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Form Teacher
-              </button>
-              <button
-                onClick={async () => {
-                  setRoleError("");
-                  setRoleLoading(true);
-                  try {
-                    await authAPI.updateTeacherRole(roleModal._id, {
-                      role: "SUBJECT_TEACHER",
-                    });
-                    setRoleModal(null);
-                    loadTeachers();
-                    setMessage("Role updated to Subject Teacher");
-                  } catch (err) {
-                    setRoleError(
-                      err.response?.data?.message || "Error updating role",
-                    );
-                  } finally {
-                    setRoleLoading(false);
-                  }
-                }}
-                disabled={roleModal.role === "SUBJECT_TEACHER" || roleLoading}
-                className="flex-1 bg-emerald-100 text-emerald-700 py-2 rounded-lg text-sm font-medium hover:bg-emerald-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Subject Teacher
-              </button>
-            </div>
-            <button
-              onClick={() => setRoleModal(null)}
-              className="w-full bg-gray-100 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
-            >
-              Cancel
-            </button>
           </div>
         </div>
       )}
