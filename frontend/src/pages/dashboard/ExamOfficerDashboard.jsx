@@ -1887,7 +1887,8 @@ export default function ExamOfficerDashboard() {
 
                 {bulkAnalysis.length > 0 && (
                   <div className="mb-3 space-y-1.5">
-                    {bulkAnalysis.map((item, idx) => {
+                    {[...bulkAnalysis].reverse().map((item) => {
+                      const idx = item.idx;
                       const isOk = item.exact && !item.alreadyRegistered && !item.isDuplicate;
                       const isReg = item.alreadyRegistered;
                       const isRepeat = item.isDuplicate;
