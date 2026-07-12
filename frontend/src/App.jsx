@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { SocketProvider } from './context/SocketContext'
+import { NetworkProvider } from './context/NetworkContext'
+import NetworkBanner from './components/NetworkBanner'
 import Layout from './components/Layout'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
@@ -33,9 +35,11 @@ function DashboardRouter() {
 function App() {
   return (
     <AuthProvider>
-      <SocketProvider>
-      <BrowserRouter>
-        <Routes>
+      <NetworkProvider>
+        <SocketProvider>
+          <BrowserRouter>
+            <NetworkBanner />
+            <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
@@ -75,9 +79,10 @@ function App() {
               </div>
             } />
           </Route>
-        </Routes>
-      </BrowserRouter>
-      </SocketProvider>
+          </Routes>
+        </BrowserRouter>
+        </SocketProvider>
+      </NetworkProvider>
     </AuthProvider>
   )
 }
