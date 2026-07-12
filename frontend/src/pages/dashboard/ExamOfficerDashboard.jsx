@@ -105,6 +105,8 @@ export default function ExamOfficerDashboard() {
   const [termLoading, setTermLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(null);
   const [teacherLoading, setTeacherLoading] = useState(false);
+  const [teacherAlert, setTeacherAlert] = useState(null);
+  const [teacherRefreshKey, setTeacherRefreshKey] = useState(0);
   const [withholdLoading, setWithholdLoading] = useState(null);
 
   const [pendingSummary, setPendingSummary] = useState([]);
@@ -233,6 +235,13 @@ export default function ExamOfficerDashboard() {
   }, [sessionTermAlert]);
 
   useEffect(() => {
+    if (teacherAlert) {
+      const t = setTimeout(() => setTeacherAlert(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [teacherAlert]);
+
+  useEffect(() => {
     const names = bulkSubjectsText.split(",").map(s => s.trim()).filter(Boolean);
     const registeredNames = regClassSubjects.map(s => s.name.toUpperCase());
     const seen = {};
@@ -269,6 +278,7 @@ export default function ExamOfficerDashboard() {
   useSocketListener('result:withheld', refreshWithheld)
   useSocketListener('pin:generated', refreshCurrentTab)
   useSocketListener('pin:revoked', refreshCurrentTab)
+  useSocketListener('teacher:created', () => setTeacherRefreshKey(k => k + 1))
 
   const tabs = [
     { id: "sessions", label: "Sessions" },
@@ -528,8 +538,9 @@ export default function ExamOfficerDashboard() {
     e.preventDefault();
     setTeacherLoading(true);
     try {
-      await authAPI.createTeacher(teacherForm);
-      setMessage("Teacher created");
+      const res = await authAPI.createTeacher(teacherForm);
+      setTeacherAlert({ type: "success", text: `${res.data.teacher.firstName} ${res.data.teacher.lastName} created successfully` });
+      setTeacherRefreshKey(k => k + 1);
       setTeacherForm({
         firstName: "",
         lastName: "",
@@ -542,6 +553,7 @@ export default function ExamOfficerDashboard() {
         type: "error",
         text: err.response?.data?.message || "Server error",
       });
+      setTeacherAlert({ type: "error", text: err.response?.data?.message || "Server error" });
     } finally {
       setTeacherLoading(false);
     }
@@ -2153,7 +2165,7 @@ export default function ExamOfficerDashboard() {
               <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">
                 Assigned Form Teachers
               </h3>
-              <TeacherAssignments setMessage={setMessage} />
+              <TeacherAssignments setMessage={setMessage} refreshKey={teacherRefreshKey} />
             </div>
           </div>
           <SubjectTeacherPasswordSection setMessage={setMessage} />
@@ -2806,6 +2818,20 @@ export default function ExamOfficerDashboard() {
           <span>{sessionTermAlert.text}</span>
         </div>
       )}
+
+      {teacherAlert && (
+        <div className="fixed left-1/2 -translate-x-1/2 z-[9999] px-5 py-3 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 pointer-events-auto"
+          style={{ top: '66vh', animation: 'fadeInUp 0.3s ease-out', backgroundColor: teacherAlert.type === "error" ? "#FEE2E2" : "#D1FAE5", border: `1px solid ${teacherAlert.type === "error" ? "#FCA5A5" : "#6EE7B7"}`, color: teacherAlert.type === "error" ? "#991B1B" : "#065F46" }}
+        >
+          <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {teacherAlert.type === "error"
+              ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            }
+          </svg>
+          <span>{teacherAlert.text}</span>
+        </div>
+      )}
     </>
   );
 }
@@ -2956,7 +2982,7 @@ function SubjectTeacherPasswordSection({ setMessage }) {
   );
 }
 
-function TeacherAssignments({ setMessage }) {
+function TeacherAssignments({ setMessage, refreshKey }) {
   const [teachers, setTeachers] = useState([]);
   const [pwModal, setPwModal] = useState(null);
   const [newPassword, setNewPassword] = useState("");
@@ -2986,7 +3012,7 @@ function TeacherAssignments({ setMessage }) {
       .then((res) => setAllClasses(res.data))
       .catch(() => {});
   };
-  useEffect(loadTeachers, []);
+  useEffect(loadTeachers, [refreshKey]);
   const handleCancel = async (id) => {
     if (!confirm("Cancel this teacher's class assignment?")) return;
     try {
