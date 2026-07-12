@@ -25,7 +25,7 @@ function ResultView({ result, onClose }) {
             <div className="min-w-0">
               <h2 className="text-lg sm:text-xl font-bold">Academic Report</h2>
               <p className="text-yellow-400 text-sm sm:text-base truncate">{result.student?.firstName} {result.student?.lastName}</p>
-              <p className="text-[10px] sm:text-sm text-gray-300">{result.class?.name || result.student?.class?.name} - {result.session.name} ({result.term.name})</p>
+              <p className="text-[10px] sm:text-sm text-gray-300">{result.class?.name || result.student?.class?.name} - {result.session?.name} ({result.term?.name})</p>
             </div>
             <button onClick={onClose} className="text-white hover:text-yellow-400 text-xl sm:text-2xl shrink-0">&times;</button>
           </div>
@@ -47,7 +47,7 @@ function ResultView({ result, onClose }) {
               <tbody>
                 {result.details?.map((d) => (
                   <tr key={d.id} className="border-t hover:bg-gray-50">
-                    <td className="p-2 sm:p-3 font-medium whitespace-nowrap">{d.subject.name}</td>
+                    <td className="p-2 sm:p-3 font-medium whitespace-nowrap">{d.subject?.name || 'Unknown'}</td>
                     <td className="p-2 sm:p-3 text-center whitespace-nowrap">{d.ca1}</td>
                     <td className="p-2 sm:p-3 text-center whitespace-nowrap">{d.ca2}</td>
                     <td className="p-2 sm:p-3 text-center whitespace-nowrap">{d.exam}</td>
@@ -140,7 +140,7 @@ export default function ParentDashboard() {
         <select value={selectedTerm} onChange={(e) => setSelectedTerm(e.target.value)}
           className="w-full sm:w-auto px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg text-sm">
           <option value="">All Terms</option>
-          {sessions.filter(s => !selectedSession || s.id === selectedSession).flatMap(s => s.terms).map((t) => (
+          {sessions.filter(s => !selectedSession || (s._id || s.id) === selectedSession).flatMap(s => s.terms).map((t) => (
             <option key={t._id || t.id} value={t._id || t.id}>{t.name}</option>
           ))}
         </select>
@@ -189,8 +189,8 @@ export default function ParentDashboard() {
                     }`} onClick={() => setViewingResult(r)}>
                       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                         <div className="text-sm sm:text-base">
-                          <span className="font-semibold">{r.session.name}</span>
-                          <span className="text-gray-500 ml-1 sm:ml-2">- {r.term.name}</span>
+                          <span className="font-semibold">{r.session?.name}</span>
+                          <span className="text-gray-500 ml-1 sm:ml-2">- {r.term?.name}</span>
                         </div>
                         <div className="flex items-center gap-3 sm:gap-4">
                           {r.withheld ? (

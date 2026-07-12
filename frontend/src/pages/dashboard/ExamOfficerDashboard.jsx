@@ -345,6 +345,7 @@ export default function ExamOfficerDashboard() {
     setArchiveLoading(true);
     try {
       const res = await resultAPI.getArchiveBroadsheet(sessionId, termId, classId);
+      res.data.students = (res.data.students || []).filter(s => s.student != null);
       setArchiveBroadsheet(res.data);
       setArchiveLevel('broadsheet');
     } catch (err) {
@@ -445,6 +446,7 @@ export default function ExamOfficerDashboard() {
     try {
       const res = await resultAPI.getPendingBroadsheet(sessionId, termId, classId);
       if (!res.data.class) throw new Error('Class not found');
+      res.data.students = (res.data.students || []).filter(s => s.student != null);
       setPendingBroadsheet(res.data);
       setPendingLevel('broadsheet');
     } catch (err) {

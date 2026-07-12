@@ -1,4 +1,4 @@
-const { Class, Subject, ClassTeacher, AcademicSession, Term, User, Student, Result } = require('../models')
+const { Class, Subject, ClassTeacher, AcademicSession, Term, User, Student, Result, ResultDetail } = require('../models')
 const { isValidObjectId } = require('../utils/sanitize')
 const { emitToRole, emitToUser, emitBroadcast } = require('../utils/socket')
 
@@ -151,8 +151,13 @@ exports.deleteClass = async (req, res) => {
   try {
     const cls = await Class.findById(req.params.id)
     if (!cls) return res.status(404).json({ message: 'Class not found' })
+    const results = await Result.find({ class: req.params.id }).select('_id')
+    const resultIds = results.map(r => r._id)
+    if (resultIds.length > 0) {
+      await ResultDetail.deleteMany({ result: { $in: resultIds } })
+      await Result.deleteMany({ class: req.params.id })
+    }
     await Subject.deleteMany({ class: req.params.id })
-    await Result.updateMany({ class: req.params.id }, { $unset: { class: '' } })
     await Class.findByIdAndDelete(req.params.id)
     res.json({ message: 'Class deleted' })
     try { emitBroadcast('entity:updated', { type: 'class' }) } catch (e) {}
@@ -165,6 +170,7 @@ exports.deleteSubject = async (req, res) => {
   try {
     const subject = await Subject.findById(req.params.id)
     if (!subject) return res.status(404).json({ message: 'Subject not found' })
+    await ResultDetail.deleteMany({ subject: req.params.id })
     await Subject.findByIdAndDelete(req.params.id)
     res.json({ message: 'Subject deleted' })
     try { emitBroadcast('entity:updated', { type: 'subject' }) } catch (e) {}
@@ -268,8 +274,13 @@ exports.deleteSession = async (req, res) => {
     const session = await AcademicSession.findById(req.params.id).populate('terms')
     if (!session) return res.status(404).json({ message: 'Session not found' })
 
-    const termIds = session.terms.map(t => t._id)
+    const results = await Result.find({ session: req.params.id }).select('_id')
+    const resultIds = results.map(r => r._id)
+    if (resultIds.length > 0) {
+      await ResultDetail.deleteMany({ result: { $in: resultIds } })
+    }
     await Result.deleteMany({ session: req.params.id })
+    const termIds = session.terms.map(t => t._id)
     await Term.deleteMany({ _id: { $in: termIds } })
     await AcademicSession.findByIdAndDelete(req.params.id)
     res.json({ message: 'Session deleted' })
@@ -307,6 +318,11 @@ exports.deleteTerm = async (req, res) => {
     const term = await Term.findById(req.params.id)
     if (!term) return res.status(404).json({ message: 'Term not found' })
 
+    const results = await Result.find({ term: req.params.id }).select('_id')
+    const resultIds = results.map(r => r._id)
+    if (resultIds.length > 0) {
+      await ResultDetail.deleteMany({ result: { $in: resultIds } })
+    }
     await Result.deleteMany({ term: req.params.id })
     await AcademicSession.findByIdAndUpdate(term.session, { $pull: { terms: term._id } })
     await Term.findByIdAndDelete(req.params.id)

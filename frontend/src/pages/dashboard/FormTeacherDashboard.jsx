@@ -38,7 +38,7 @@ export default function FormTeacherDashboard() {
   const filteredStudents = useMemo(() => {
     if (!broadsheet || !broadsheetSearch) return broadsheet?.students || []
     return broadsheet.students.filter(row =>
-      `${row.student.lastName} ${row.student.firstName} ${row.student.regNo || ''}`
+      `${row.student?.lastName || ''} ${row.student?.firstName || ''} ${row.student?.regNo || ''}`
         .toLowerCase().includes(broadsheetSearch.toLowerCase())
     )
   }, [broadsheet, broadsheetSearch])
@@ -323,6 +323,7 @@ export default function FormTeacherDashboard() {
     try {
       if (isBackground) setRefreshing(true); else setLoading(true)
       const res = await formTeacherAPI.getBroadsheet({ sessionId: selectedSession, termId: selectedTerm })
+      res.data.students = (res.data.students || []).filter(s => s.student != null)
       setBroadsheet(res.data)
       setDaysOpen(res.data.daysOpen != null ? String(res.data.daysOpen) : '')
       setNextResDate(res.data.nextResumptionDate || '')
@@ -433,7 +434,7 @@ export default function FormTeacherDashboard() {
   }
 
   const handleSaveAttendance = async () => {
-    const records = broadsheet.students.map(s => ({
+    const records = broadsheet.students.filter(s => s.student).map(s => ({
       resultId: s.resultId,
       daysPresent: attendanceData[s.student.id]?.present || null,
       daysAbsent: attendanceData[s.student.id]?.absent || null
@@ -547,8 +548,8 @@ export default function FormTeacherDashboard() {
         <tbody>
           ${rows.map((row, i) => `<tr>
             <td>${i + 1}</td>
-            <td class="name">${row.student.lastName} ${row.student.firstName}</td>
-            <td>${row.student.gender || '-'}</td>
+            <td class="name">${row.student?.lastName || ''} ${row.student?.firstName || ''}</td>
+            <td>${row.student?.gender || '-'}</td>
             ${subjects.map(s => {
               const d = row.details[s._id || s.id]
               const sv = (v) => d && d.submitted ? v : (v || '-')
@@ -677,10 +678,10 @@ export default function FormTeacherDashboard() {
       cellText(String(i + 1), x, y, scaled('sn'), rowH); x += scaled('sn')
 
       drawRect(x, y, scaled('name'), rowH)
-      cellText(`${row.student.lastName} ${row.student.firstName}`, x, y, scaled('name'), rowH, 'left'); x += scaled('name')
+      cellText(`${row.student?.lastName || ''} ${row.student?.firstName || ''}`, x, y, scaled('name'), rowH, 'left'); x += scaled('name')
 
       drawRect(x, y, scaled('gender'), rowH)
-      cellText(row.student.gender || '-', x, y, scaled('gender'), rowH); x += scaled('gender')
+      cellText(row.student?.gender || '-', x, y, scaled('gender'), rowH); x += scaled('gender')
 
       broadsheet.subjects.forEach(s => {
         const d = row.details[s._id || s.id]
@@ -725,7 +726,7 @@ export default function FormTeacherDashboard() {
     const termName = sessions.filter(s => (s._id || s.id) === selectedSession).flatMap(s => s.terms || []).find(t => (t._id || t.id) === selectedTerm)?.name || ''
     pdf.setFontSize(10)
     pdf.setFont('helvetica', 'bold')
-    pdf.text(`${broadsheet.class.name} - RESULT BROADSHEET`, pageW - margin, margin + 4, { align: 'right' })
+    pdf.text(`${broadsheet.class?.name || 'Class'} - RESULT BROADSHEET`, pageW - margin, margin + 4, { align: 'right' })
     pdf.setFontSize(8)
     pdf.setFont('helvetica', 'normal')
     pdf.text(`${sessionName} | ${termName}`, pageW - margin, margin + 9, { align: 'right' })
@@ -765,7 +766,7 @@ export default function FormTeacherDashboard() {
     })
     headers.push('GRAND TOTAL', 'AVERAGE', 'POSITION')
     const data = broadsheet.students.map((row, i) => {
-      const rowData = [i + 1, `${row.student.lastName} ${row.student.firstName}`, row.student.gender || '-']
+      const rowData = [i + 1, `${row.student?.lastName || ''} ${row.student?.firstName || ''}`, row.student?.gender || '-']
       broadsheet.subjects.forEach(s => {
         const d = row.details[s._id || s.id]
         if (d) {
@@ -788,7 +789,7 @@ export default function FormTeacherDashboard() {
     ws['!cols'] = colW
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Broadsheet')
-    XLSX.writeFile(wb, `${broadsheet.class.name}_broadsheet.xlsx`)
+    XLSX.writeFile(wb, `${broadsheet.class?.name || 'Class'}_broadsheet.xlsx`)
   }
 
   if (loading && !broadsheet) {
@@ -1351,7 +1352,7 @@ export default function FormTeacherDashboard() {
                 </div>
               </div>
 
-              {broadsheet.students.every(s => s.status === 'SUBMITTED') ? (
+              {broadsheet.students.length > 0 && broadsheet.students.every(s => s.status === 'SUBMITTED') ? (
                 <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm font-medium">
                   This broadsheet has already been submitted to the exam officer.
                 </div>

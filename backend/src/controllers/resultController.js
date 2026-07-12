@@ -154,6 +154,7 @@ exports.toggleWithhold = async (req, res) => {
     if (withheld && reason) update.withholdReason = reason
     if (!withheld) update.withholdReason = ''
     const result = await Result.findByIdAndUpdate(req.params.id, update, { new: true })
+    if (!result) return res.status(404).json({ message: 'Result not found' })
     res.json({ message: withheld ? 'Result withheld' : 'Result released', result })
     try { emitToRole('EXAM_OFFICER', 'result:withheld', { resultId: req.params.id, withheld }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
@@ -172,6 +173,7 @@ exports.addTeacherComment = async (req, res) => {
       { teacherComment, formTeacher: req.user.id },
       { new: true }
     )
+    if (!result) return res.status(404).json({ message: 'Result not found' })
     res.json(result)
     try { emitToRole('EXAM_OFFICER', 'result:comment', { result }); emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
@@ -284,6 +286,7 @@ exports.updatePrincipalComment = async (req, res) => {
       return res.status(400).json({ message: 'Comment must be under 500 characters' })
     }
     const result = await Result.findByIdAndUpdate(req.params.id, { principalComment }, { new: true })
+    if (!result) return res.status(404).json({ message: 'Result not found' })
     res.json(result)
     try { emitBroadcast('entity:updated', { type: 'result' }) } catch (e) {}
   } catch (error) {
@@ -348,7 +351,7 @@ exports.getPendingBroadsheet = async (req, res) => {
       let subjectCount = 0
 
       for (const sub of classSubjects) {
-        const detail = result?.details.find(d => d.subject._id.toString() === sub._id.toString())
+        const detail = result?.details.find(d => d.subject?._id?.toString() === sub._id.toString())
         if (detail) {
           details[sub._id] = { ca1: detail.ca1, ca2: detail.ca2, exam: detail.exam, total: detail.total, grade: detail.grade, remark: detail.remark, submitted: detail.submitted }
           totalScore += detail.total
@@ -587,7 +590,7 @@ exports.getArchiveBroadsheet = async (req, res) => {
       let subjectCount = 0
 
       for (const sub of classSubjects) {
-        const detail = result?.details.find(d => d.subject._id.toString() === sub._id.toString())
+        const detail = result?.details.find(d => d.subject?._id?.toString() === sub._id.toString())
         if (detail) {
           details[sub._id] = { ca1: detail.ca1, ca2: detail.ca2, exam: detail.exam, total: detail.total, grade: detail.grade, remark: detail.remark, submitted: detail.submitted }
           totalScore += detail.total

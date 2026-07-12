@@ -141,6 +141,7 @@ exports.updateStudent = async (req, res) => {
       update,
       { new: true }
     ).populate('class')
+    if (!student) return res.status(404).json({ message: 'Student not found' })
     res.json(student)
     try { emitBroadcast('entity:updated', { type: 'student' }) } catch (e) {}
   } catch (error) {
@@ -497,6 +498,12 @@ exports.deleteStudent = async (req, res) => {
   try {
     const student = await Student.findByIdAndDelete(req.params.id)
     if (!student) return res.status(404).json({ message: 'Student not found' })
+    const results = await Result.find({ student: req.params.id }).select('_id')
+    const resultIds = results.map(r => r._id)
+    if (resultIds.length > 0) {
+      await ResultDetail.deleteMany({ result: { $in: resultIds } })
+      await Result.deleteMany({ student: req.params.id })
+    }
     res.json({ message: 'Student deleted' })
     try { emitBroadcast('entity:updated', { type: 'student' }) } catch (e) {}
   } catch (error) {

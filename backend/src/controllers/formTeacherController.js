@@ -45,7 +45,7 @@ exports.getBroadsheet = async (req, res) => {
       let subjectCount = 0
 
       for (const sub of classSubjects) {
-        const detail = result?.details.find(d => d.subject._id.toString() === sub._id.toString())
+        const detail = result?.details.find(d => d.subject?._id?.toString() === sub._id.toString())
         if (detail) {
           details[sub._id] = { ca1: detail.ca1, ca2: detail.ca2, exam: detail.exam, total: detail.total, grade: detail.grade, remark: detail.remark, submitted: detail.submitted }
           totalScore += detail.total
