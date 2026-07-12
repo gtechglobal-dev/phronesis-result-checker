@@ -1235,7 +1235,7 @@ export default function FormTeacherDashboard() {
 
       {activeTab === 'students' && (
         <div className="grid lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
+          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6 overflow-hidden min-w-0">
             <h3 className="font-bold text-base sm:text-lg text-[#1B5E20] mb-4">Register Students</h3>
             <form onSubmit={handleCreateStudent} className="space-y-3">
               <div>
@@ -1255,10 +1255,10 @@ export default function FormTeacherDashboard() {
             </form>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white rounded-xl shadow-md p-5 sm:p-6 overflow-hidden min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <h3 className="font-bold text-base sm:text-lg text-[#1B5E20]">Students in {myClass?.name || 'Class'}</h3>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button onClick={handleDownloadXLSX}
                   className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition cursor-pointer">
                   Download XLSX
