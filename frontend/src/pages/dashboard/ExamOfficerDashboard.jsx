@@ -235,11 +235,21 @@ export default function ExamOfficerDashboard() {
   useEffect(() => {
     const names = bulkSubjectsText.split(",").map(s => s.trim()).filter(Boolean);
     const registeredNames = regClassSubjects.map(s => s.name.toUpperCase());
-    setBulkAnalysis(names.map(input => ({
-      input,
-      ...findSubjectMatches(input, registeredNames),
-      resolved: findSubjectMatches(input, registeredNames).exact !== null,
-    })));
+    const seen = {};
+    setBulkAnalysis(names.map((input, idx) => {
+      const match = findSubjectMatches(input, registeredNames);
+      const matchKey = match.exact || (match.suggestions.length > 0 ? match.suggestions[0] : input.toUpperCase());
+      const isDuplicate = seen[matchKey] !== undefined;
+      if (!isDuplicate) seen[matchKey] = idx;
+      return {
+        input,
+        idx,
+        ...match,
+        resolved: match.exact !== null,
+        isDuplicate,
+        duplicateOf: isDuplicate ? seen[matchKey] : null,
+      };
+    }));
   }, [bulkSubjectsText, regClassSubjects]);
 
   const refreshCurrentTab = useCallback(() => {
@@ -1878,21 +1888,21 @@ export default function ExamOfficerDashboard() {
                 {bulkAnalysis.length > 0 && (
                   <div className="mb-3 space-y-1.5">
                     {bulkAnalysis.map((item, idx) => {
-                      const isOk = item.exact && !item.alreadyRegistered;
-                      const isDup = item.alreadyRegistered;
-                      const hasFix = !item.exact && item.suggestions.length > 0;
-                      const isBad = !item.exact && item.suggestions.length === 0;
+                      const isOk = item.exact && !item.alreadyRegistered && !item.isDuplicate;
+                      const isReg = item.alreadyRegistered;
+                      const isRepeat = item.isDuplicate;
+                      const hasFix = !item.exact && item.suggestions.length > 0 && !isRepeat;
+                      const isBad = !item.exact && item.suggestions.length === 0 && !isRepeat;
+                      const color = isRepeat ? 'bg-orange-50' : isOk ? 'bg-green-50' : isReg ? 'bg-yellow-50' : hasFix ? 'bg-blue-50' : 'bg-red-50';
+                      const textColor = isRepeat ? 'text-orange-700' : isOk ? 'text-green-700' : isReg ? 'text-yellow-700' : hasFix ? 'text-blue-700' : 'text-red-700';
                       return (
-                        <div key={idx} className={`flex items-center gap-2 text-xs px-2 py-1.5 rounded-md ${
-                          isOk ? 'bg-green-50' : isDup ? 'bg-yellow-50' : hasFix ? 'bg-blue-50' : 'bg-red-50'
-                        }`}>
-                          <span className={`font-medium shrink-0 ${
-                            isOk ? 'text-green-700' : isDup ? 'text-yellow-700' : hasFix ? 'text-blue-700' : 'text-red-700'
-                          }`}>
+                        <div key={idx} className={`flex items-center gap-2 text-xs px-2 py-1.5 rounded-md ${color}`}>
+                          <span className={`font-medium shrink-0 ${textColor}`}>
                             {item.input}
                           </span>
                           {isOk && <span className="text-green-600 text-[10px]">ready</span>}
-                          {isDup && <span className="text-yellow-600 text-[10px]">already added</span>}
+                          {isReg && <span className="text-yellow-600 text-[10px]">already added</span>}
+                          {isRepeat && <span className="text-orange-600 text-[10px]">duplicate</span>}
                           {hasFix && (
                             <div className="flex flex-wrap gap-1">
                               {item.suggestions.map((s, si) => (
@@ -1912,6 +1922,19 @@ export default function ExamOfficerDashboard() {
                             </div>
                           )}
                           {isBad && <span className="text-red-500 text-[10px]">not found</span>}
+                          {(isRepeat || isReg) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const parts = bulkSubjectsText.split(",").map(p => p.trim()).filter(Boolean);
+                                parts.splice(idx, 1);
+                                setBulkSubjectsText(parts.join(", "));
+                              }}
+                              className="ml-auto text-red-400 hover:text-red-600 transition"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -1928,12 +1951,14 @@ export default function ExamOfficerDashboard() {
                       setMessage({ type: "error", text: "Enter at least one subject" });
                       return;
                     }
-                    const hasUnresolved = bulkAnalysis.some(a => !a.exact && a.suggestions.length === 0);
+                    const hasUnresolved = bulkAnalysis.some(a => !a.exact && a.suggestions.length === 0 && !a.isDuplicate);
                     if (hasUnresolved) {
                       setMessage({ type: "error", text: "Some subjects could not be matched. Please select a suggestion or remove them." });
                       return;
                     }
-                    const finalNames = bulkAnalysis.map(a => a.exact || a.suggestions[0] || a.input);
+                    const finalNames = bulkAnalysis
+                      .filter(a => !a.isDuplicate && !a.alreadyRegistered)
+                      .map(a => a.exact || a.suggestions[0] || a.input);
                     const uniqueNames = [...new Set(finalNames)];
                     setBulkSubjectsLoading(true);
                     try {
@@ -1959,12 +1984,12 @@ export default function ExamOfficerDashboard() {
                       setBulkSubjectsLoading(false);
                     }
                   }}
-                  disabled={bulkSubjectsLoading || !bulkSubjectsText.trim() || bulkAnalysis.some(a => !a.exact && a.suggestions.length === 0)}
+                  disabled={bulkSubjectsLoading || !bulkSubjectsText.trim() || bulkAnalysis.some(a => !a.exact && a.suggestions.length === 0 && !a.isDuplicate)}
                   className="w-full bg-[#1B5E20] text-white py-2 rounded-lg text-sm font-medium hover:bg-[#2E7D32] transition disabled:opacity-50"
                 >
                   {bulkSubjectsLoading
                     ? "Adding..."
-                    : `Add ${bulkAnalysis.filter(a => a.exact || a.suggestions.length > 0).length} Verified Subject(s)`}
+                    : `Add ${bulkAnalysis.filter(a => (a.exact || a.suggestions.length > 0) && !a.isDuplicate && !a.alreadyRegistered).length} Verified Subject(s)`}
                 </button>
               </div>
             </>
