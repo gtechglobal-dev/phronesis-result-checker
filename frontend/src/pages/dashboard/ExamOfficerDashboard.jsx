@@ -52,6 +52,38 @@ const SUBJECTS_LIST = [
   "SPEECH AND DRAMA", "SWIMMING", "CHESS", "STEM"
 ]
 
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+  return dp[m][n];
+}
+
+function findSubjectMatches(input, registeredNames = []) {
+  const up = input.toUpperCase().trim();
+  if (!up) return { exact: null, suggestions: [], alreadyRegistered: false };
+  const exact = SUBJECTS_LIST.find(s => s === up);
+  if (exact) {
+    return { exact, suggestions: [], alreadyRegistered: registeredNames.includes(exact) };
+  }
+  const startsWith = SUBJECTS_LIST.filter(s => s.startsWith(up) || up.startsWith(s));
+  const includes = SUBJECTS_LIST.filter(s => s.includes(up) || up.includes(s) && !startsWith.includes(s));
+  const fuzzy = SUBJECTS_LIST
+    .map(s => ({ s, dist: levenshtein(up, s) }))
+    .filter(x => x.dist <= Math.max(2, Math.floor(up.length * 0.4)))
+    .sort((a, b) => a.dist - b.dist)
+    .map(x => x.s);
+  const seen = new Set();
+  const suggestions = [...startsWith, ...includes, ...fuzzy].filter(s => { if (seen.has(s)) return false; seen.add(s); return true; }).slice(0, 6);
+  return { exact: null, suggestions, alreadyRegistered: false };
+}
+
 const formatDate = (d) => {
   if (!d) return '-'
   try {
@@ -171,6 +203,7 @@ export default function ExamOfficerDashboard() {
   const [regClassSubjectsLoading, setRegClassSubjectsLoading] = useState(false);
   const [bulkSubjectsText, setBulkSubjectsText] = useState("");
   const [bulkSubjectsLoading, setBulkSubjectsLoading] = useState(false);
+  const [bulkAnalysis, setBulkAnalysis] = useState([]);
   const [subjectSearch, setSubjectSearch] = useState("");
   const [showSubjectDropdown, setShowSubjectDropdown] = useState(false);
   const [copySubjectsLoading, setCopySubjectsLoading] = useState(false);
@@ -198,6 +231,16 @@ export default function ExamOfficerDashboard() {
       return () => clearTimeout(t);
     }
   }, [sessionTermAlert]);
+
+  useEffect(() => {
+    const names = bulkSubjectsText.split(",").map(s => s.trim()).filter(Boolean);
+    const registeredNames = regClassSubjects.map(s => s.name.toUpperCase());
+    setBulkAnalysis(names.map(input => ({
+      input,
+      ...findSubjectMatches(input, registeredNames),
+      resolved: findSubjectMatches(input, registeredNames).exact !== null,
+    })));
+  }, [bulkSubjectsText, regClassSubjects]);
 
   const refreshCurrentTab = useCallback(() => {
     if (activeTab === 'sessions') { loadClasses(); loadSessions() }
@@ -1822,15 +1865,78 @@ export default function ExamOfficerDashboard() {
                   Bulk Add Subjects
                 </h4>
                 <p className="text-[10px] text-gray-400 mb-2">
-                  Separate subjects with commas
+                  Separate subjects with commas. The system will auto-detect and suggest corrections for misspelled or incomplete names.
                 </p>
                 <textarea
                   rows={3}
                   value={bulkSubjectsText}
-                  onChange={(e) => setBulkSubjectsText(e.target.value)}
+                  onChange={(e) => setBulkSubjectsText(e.target.value.toUpperCase())}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono mb-3"
-                  placeholder={"Mathematics, English Language, Basic Science"}
+                  placeholder={"MATHEMATICS, ENGLISH STUDIES, BASIC SCIENC"}
                 />
+
+                {bulkAnalysis.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {bulkAnalysis.map((item, idx) => (
+                      <div key={idx} className={`rounded-lg p-2.5 text-xs border ${
+                        item.exact && !item.alreadyRegistered ? 'bg-green-50 border-green-200' :
+                        item.alreadyRegistered ? 'bg-yellow-50 border-yellow-200' :
+                        item.suggestions.length > 0 ? 'bg-blue-50 border-blue-200' :
+                        'bg-red-50 border-red-200'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          {item.exact && !item.alreadyRegistered && (
+                            <svg className="w-3.5 h-3.5 text-green-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          )}
+                          {item.alreadyRegistered && (
+                            <svg className="w-3.5 h-3.5 text-yellow-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          )}
+                          {!item.exact && item.suggestions.length > 0 && (
+                            <svg className="w-3.5 h-3.5 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          )}
+                          {!item.exact && item.suggestions.length === 0 && (
+                            <svg className="w-3.5 h-3.5 text-red-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          )}
+                          <span className={`font-medium ${
+                            item.exact && !item.alreadyRegistered ? 'text-green-800' :
+                            item.alreadyRegistered ? 'text-yellow-800' :
+                            item.suggestions.length > 0 ? 'text-blue-800' : 'text-red-800'
+                          }`}>
+                            {item.input}
+                          </span>
+                          {item.exact && !item.alreadyRegistered && (
+                            <span className="text-green-600">— exact match</span>
+                          )}
+                          {item.alreadyRegistered && (
+                            <span className="text-yellow-600">— already registered</span>
+                          )}
+                        </div>
+                        {item.suggestions.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 ml-5">
+                            {item.suggestions.map((s, si) => (
+                              <button
+                                key={si}
+                                type="button"
+                                onClick={() => {
+                                  const parts = bulkSubjectsText.split(",").map(p => p.trim());
+                                  parts[idx] = s;
+                                  setBulkSubjectsText(parts.join(", "));
+                                }}
+                                className="px-2 py-0.5 bg-white border border-blue-300 rounded text-blue-700 hover:bg-blue-100 transition text-[11px] font-medium"
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {!item.exact && item.suggestions.length === 0 && (
+                          <p className="text-red-600 ml-5 mt-0.5">No matching subject found in the system</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <button
                   onClick={async () => {
                     const names = bulkSubjectsText
@@ -1838,24 +1944,26 @@ export default function ExamOfficerDashboard() {
                       .map((s) => s.trim())
                       .filter(Boolean);
                     if (names.length === 0) {
-                      setMessage({
-                        type: "error",
-                        text: "Enter at least one subject",
-                      });
+                      setMessage({ type: "error", text: "Enter at least one subject" });
                       return;
                     }
+                    const hasUnresolved = bulkAnalysis.some(a => !a.exact && a.suggestions.length === 0);
+                    if (hasUnresolved) {
+                      setMessage({ type: "error", text: "Some subjects could not be matched. Please select a suggestion or remove them." });
+                      return;
+                    }
+                    const finalNames = bulkAnalysis.map(a => a.exact || a.suggestions[0] || a.input);
+                    const uniqueNames = [...new Set(finalNames)];
                     setBulkSubjectsLoading(true);
                     try {
                       const res = await classAPI.bulkCreateSubjects({
-                        names,
+                        names: uniqueNames,
                         classId: subjectRegForm.classId,
                         sessionId: subjectRegForm.sessionId,
                       });
-                      setMessage({
-                        type: "success",
-                        text: `${res.data.count} subject(s) added`,
-                      });
+                      setMessage({ type: "success", text: `${res.data.count} subject(s) added` });
                       setBulkSubjectsText("");
+                      setBulkAnalysis([]);
                       const subjectsRes = await classAPI.getSubjects(
                         subjectRegForm.classId,
                         { params: { sessionId: subjectRegForm.sessionId } }
@@ -1864,22 +1972,18 @@ export default function ExamOfficerDashboard() {
                     } catch (err) {
                       setMessage({
                         type: "error",
-                        text:
-                          err.response?.data?.message ||
-                          "Error adding subjects",
+                        text: err.response?.data?.message || "Error adding subjects",
                       });
                     } finally {
                       setBulkSubjectsLoading(false);
                     }
                   }}
-                  disabled={
-                    bulkSubjectsLoading || !bulkSubjectsText.trim()
-                  }
+                  disabled={bulkSubjectsLoading || !bulkSubjectsText.trim() || bulkAnalysis.some(a => !a.exact && a.suggestions.length === 0)}
                   className="w-full bg-[#1B5E20] text-white py-2 rounded-lg text-sm font-medium hover:bg-[#2E7D32] transition disabled:opacity-50"
                 >
                   {bulkSubjectsLoading
                     ? "Adding..."
-                    : `Add ${bulkSubjectsText.split(",").filter((s) => s.trim()).length > 1 ? `${bulkSubjectsText.split(",").filter((s) => s.trim()).length} Subjects` : "Subjects"}`}
+                    : `Add ${bulkAnalysis.filter(a => a.exact || a.suggestions.length > 0).length} Verified Subject(s)`}
                 </button>
               </div>
             </>
