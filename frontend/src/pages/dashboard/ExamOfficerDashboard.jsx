@@ -414,16 +414,11 @@ export default function ExamOfficerDashboard() {
     setSessionLoading(true);
     try {
       await classAPI.createSession(sessionForm);
-      setMessage("Session created");
       setSessionTermAlert({ type: "success", text: "Session created successfully" });
       setSessionForm({ name: "", isCurrent: true });
       loadSessions();
     } catch (err) {
       console.error(err);
-      setMessage({
-        type: "error",
-        text: err.response?.data?.message || "Server error",
-      });
       setSessionTermAlert({ type: "error", text: err.response?.data?.message || "Server error" });
     } finally {
       setSessionLoading(false);
@@ -435,16 +430,11 @@ export default function ExamOfficerDashboard() {
     setTermLoading(true);
     try {
       await classAPI.createTerm(termForm);
-      setMessage("Term created");
       setSessionTermAlert({ type: "success", text: "Term created successfully" });
       setTermForm({ name: "", sessionId: "", isCurrent: true });
       loadSessions();
     } catch (err) {
       console.error(err);
-      setMessage({
-        type: "error",
-        text: err.response?.data?.message || "Server error",
-      });
       setSessionTermAlert({ type: "error", text: err.response?.data?.message || "Server error" });
     } finally {
       setTermLoading(false);
