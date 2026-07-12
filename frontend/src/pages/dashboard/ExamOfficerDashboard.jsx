@@ -68,6 +68,7 @@ export default function ExamOfficerDashboard() {
   const [classes, setClasses] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [message, setMessage] = useState(null);
+  const [sessionTermAlert, setSessionTermAlert] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [termLoading, setTermLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(null);
@@ -190,6 +191,13 @@ export default function ExamOfficerDashboard() {
       return () => clearTimeout(t);
     }
   }, [copyMessage]);
+
+  useEffect(() => {
+    if (sessionTermAlert) {
+      const t = setTimeout(() => setSessionTermAlert(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [sessionTermAlert]);
 
   const refreshCurrentTab = useCallback(() => {
     if (activeTab === 'sessions') { loadClasses(); loadSessions() }
@@ -407,6 +415,7 @@ export default function ExamOfficerDashboard() {
     try {
       await classAPI.createSession(sessionForm);
       setMessage("Session created");
+      setSessionTermAlert({ type: "success", text: "Session created successfully" });
       setSessionForm({ name: "", isCurrent: true });
       loadSessions();
     } catch (err) {
@@ -415,6 +424,7 @@ export default function ExamOfficerDashboard() {
         type: "error",
         text: err.response?.data?.message || "Server error",
       });
+      setSessionTermAlert({ type: "error", text: err.response?.data?.message || "Server error" });
     } finally {
       setSessionLoading(false);
     }
@@ -426,6 +436,7 @@ export default function ExamOfficerDashboard() {
     try {
       await classAPI.createTerm(termForm);
       setMessage("Term created");
+      setSessionTermAlert({ type: "success", text: "Term created successfully" });
       setTermForm({ name: "", sessionId: "", isCurrent: true });
       loadSessions();
     } catch (err) {
@@ -434,6 +445,7 @@ export default function ExamOfficerDashboard() {
         type: "error",
         text: err.response?.data?.message || "Server error",
       });
+      setSessionTermAlert({ type: "error", text: err.response?.data?.message || "Server error" });
     } finally {
       setTermLoading(false);
     }
@@ -3141,6 +3153,20 @@ function TeacherAssignments({ setMessage }) {
               Cancel
             </button>
           </div>
+        </div>
+      )}
+
+      {sessionTermAlert && (
+        <div className="fixed bottom-12 sm:bottom-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg shadow-lg text-xs sm:text-sm font-medium flex items-center gap-2 pointer-events-auto"
+          style={{ animation: 'fadeInUp 0.3s ease-out', backgroundColor: sessionTermAlert.type === "error" ? "#FEE2E2" : "#D1FAE5", border: `1px solid ${sessionTermAlert.type === "error" ? "#FCA5A5" : "#6EE7B7"}`, color: sessionTermAlert.type === "error" ? "#991B1B" : "#065F46" }}
+        >
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {sessionTermAlert.type === "error"
+              ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            }
+          </svg>
+          <span>{sessionTermAlert.text}</span>
         </div>
       )}
     </>
