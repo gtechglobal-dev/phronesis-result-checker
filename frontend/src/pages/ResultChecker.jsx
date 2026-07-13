@@ -234,7 +234,11 @@ export default function ResultChecker() {
 
       {/* FORM - only show when not loading and no result */}
       {showForm && (
-        <div className="max-w-lg mx-auto px-4 py-8 sm:py-12">
+        <div className="max-w-lg mx-auto px-4 py-8 sm:py-12 relative">
+          <Link to="/" className="absolute top-0 left-4 inline-flex items-center gap-2 text-[#1B5E20] hover:text-yellow-600 font-medium transition text-sm no-print">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            Back to Home
+          </Link>
           <div className="text-center mb-8">
             <img src="/school logo.png" alt="Phronesis" className="h-16 w-16 sm:h-20 sm:w-20 mx-auto rounded-full mb-3" />
             <h1 className="text-2xl sm:text-3xl font-bold text-[#1B5E20]">Check Result</h1>
@@ -294,12 +298,6 @@ export default function ResultChecker() {
                 Check Result
               </button>
             </form>
-          </div>
-          <div className="text-center mt-6 no-print">
-            <Link to="/" className="inline-flex items-center gap-2 text-[#1B5E20] hover:text-yellow-600 font-medium transition text-sm">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-              Back to Home
-            </Link>
           </div>
         </div>
       )}
