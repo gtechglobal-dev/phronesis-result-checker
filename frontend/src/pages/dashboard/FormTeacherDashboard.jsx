@@ -893,10 +893,10 @@ export default function FormTeacherDashboard() {
       </div>
 
       {activeTab === 'broadsheet' && (
-        <div className="bg-white rounded-xl shadow-md p-5 sm:p-6" ref={broadsheetRef}>
-          <div className="flex justify-between items-center mb-4">
+        <div className="bg-white rounded-xl shadow-md p-5 sm:p-6 overflow-hidden min-w-0" ref={broadsheetRef}>
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
             <h3 className="font-bold text-lg text-[#1B5E20]">Result Broadsheet</h3>
-            <div className="flex gap-2 items-center">
+            <div className="flex flex-wrap gap-2 items-center">
               <button onClick={() => loadBroadsheet()} className="text-xs text-[#1B5E20] hover:text-yellow-600 font-medium transition">Refresh</button>
               {refreshing && <div className="w-3 h-3 border-2 border-[#1B5E20] border-t-transparent rounded-full animate-spin" />}
               <button onClick={downloadBroadsheetXLSX}
